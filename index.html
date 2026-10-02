@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Download AVNI Phone</title>
+<meta name="theme-color" content="#E8590B">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{--bg:#f6f5f2;--card:#fff;--ink:#171717;--mute:#6b6b6b;--line:#e5e5e5;--org:#E8590B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  header{background:#15181c;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:12px}
+  header img{width:44px;height:44px;border-radius:10px}
+  header h1{font-size:18px;margin:0;flex:1}
+  .lang{display:flex;gap:4px}
+  .lang button{border:1px solid #475569;background:transparent;color:#fff;border-radius:8px;padding:3px 9px;font-weight:800;font-size:13px}
+  .lang button.on{background:#fff;color:#15181c}
+  main{max-width:560px;margin:0 auto;padding:16px}
+  .who{text-align:center;font-weight:700;color:var(--mute);margin:6px 0 14px}
+  .get{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--org);color:#fff;text-decoration:none;font-weight:800;font-size:18px;padding:14px;border-radius:12px;margin:4px 0 14px}
+  .get svg{width:26px;height:26px}
+  .meta{color:var(--mute);font-size:13px;text-align:center;margin:-8px 0 14px}
+  ol{margin:0;padding-left:22px}
+  li{margin:6px 0}
+  .note{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;font-size:14px;margin-top:14px}
+  .old{margin-top:18px;font-size:14px;color:var(--mute)}
+  .old a{color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <img src="icon-192.png" alt="">
+  <h1 data-t="title">AVNI Phone</h1>
+  <div class="lang"><button data-l="en">EN</button><button data-l="hi">हिं</button><button data-l="mr">मरा</button></div>
+</header>
+<main>
+  <p class="who" data-t="who">Android only · for Ravi and family</p>
+  <a class="get" id="apk" href="https://github.com/sehgalautoriders/avni/releases/latest/download/AVNI-Phone.apk"><svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#fff"><path d="M14 30a18 18 0 0 1 36 0z"/><rect x="14" y="32" width="36" height="22" rx="4"/><rect x="5" y="32" width="7" height="18" rx="3.5"/><rect x="52" y="32" width="7" height="18" rx="3.5"/><rect x="21" y="50" width="7" height="12" rx="3.5"/><rect x="36" y="50" width="7" height="12" rx="3.5"/><path d="M21 9.5l4 6.5M43 9.5l-4 6.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></g><circle cx="25" cy="23" r="2.4" fill="#E8590B"/><circle cx="39" cy="23" r="2.4" fill="#E8590B"/></svg><span data-t="getApk">Download the latest AVNI Phone</span></a>
+  <p class="meta" id="apkmeta"></p>
+  <ol>
+    <li data-t="a1">Tap the orange button. The file AVNI-Phone.apk downloads.</li>
+    <li data-t="a2">Open it from the notification (or Files → Downloads).</li>
+    <li data-t="a3">If the phone says "not allowed", tap Settings → turn on "Allow from this source" → go back.</li>
+    <li data-t="a4">Tap Update (or Install), then Open. Your messages and settings stay — it installs over the old one.</li>
+    <li data-t="a5">If "Play Protect" warns about an unknown app: tap More details → Install anyway. The app is ours, not from the Play Store, so Google shows this once.</li>
+  </ol>
+  <p class="note" data-t="aNote">Every new version is put here the same day. Open this page again whenever you want the newest one — the version number above tells you what is here now.</p>
+  <p class="old" id="old"></p>
+</main>
+<script>
+(function(){
+  var T={
+    title:['AVNI Phone','AVNI Phone','AVNI Phone'],
+    who:['Android only · for Ravi and family','सिर्फ़ Android · रवि और परिवार के लिए','फक्त Android · रवी आणि कुटुंबासाठी'],
+    getApk:['Download the latest AVNI Phone','नया AVNI Phone डाउनलोड करें','नवीन AVNI Phone डाउनलोड करा'],
+    a1:['Tap the orange button. The file AVNI-Phone.apk downloads.','नारंगी बटन दबाएँ। AVNI-Phone.apk फ़ाइल डाउनलोड होगी।','नारिंगी बटण दाबा. AVNI-Phone.apk फाइल डाउनलोड होईल.'],
+    a2:['Open it from the notification (or Files → Downloads).','नोटिफ़िकेशन से खोलें (या Files → Downloads में)।','नोटिफिकेशनमधून उघडा (किंवा Files → Downloads मध्ये).'],
+    a3:['If the phone says "not allowed", tap Settings → turn on "Allow from this source" → go back.','अगर फ़ोन "अनुमति नहीं" बोले तो Settings → "Allow from this source" चालू करें → वापस जाएँ।','फोन "परवानगी नाही" म्हणाला तर Settings → "Allow from this source" चालू करा → मागे जा.'],
+    a4:['Tap Update (or Install), then Open. Your messages and settings stay — it installs over the old one.','Update (या Install) दबाएँ, फिर Open। आपके मैसेज और सेटिंग्स वैसे ही रहेंगे — यह पुराने के ऊपर इंस्टॉल होता है।','Update (किंवा Install) दाबा, मग Open. तुमचे मेसेज आणि सेटिंग्स तसेच राहतात — हे जुन्यावरच इंस्टॉल होते.'],
+    a5:['If "Play Protect" warns about an unknown app: tap More details → Install anyway. The app is ours, not from the Play Store, so Google shows this once.','अगर "Play Protect" अनजान ऐप की चेतावनी दे: More details → Install anyway दबाएँ। ऐप हमारा है, Play Store का नहीं, इसलिए Google एक बार यह दिखाता है।','"Play Protect" अनोळखी ॲपची सूचना दाखवेल तर: More details → Install anyway दाबा. ॲप आपले आहे, Play Store चे नाही, म्हणून Google एकदा हे दाखवते.'],
+    aNote:['Every new version is put here the same day. Open this page again whenever you want the newest one — the version number above tells you what is here now.','हर नया वर्ज़न उसी दिन यहाँ आ जाता है। नया चाहिए तो यह पेज फिर खोलें — ऊपर का वर्ज़न नंबर बताता है कि अभी कौन सा है।','प्रत्येक नवीन व्हर्जन त्याच दिवशी इथे येते. नवीन हवे असेल तर हे पेज पुन्हा उघडा — वरचा व्हर्जन नंबर सांगतो की आत्ता कोणते आहे.'],
+    ver:['Version ','वर्ज़न ','व्हर्जन '],
+    on:[' · put here ',' · यहाँ रखा ',' · इथे ठेवले ']
+  };
+  var IDX={en:0,hi:1,mr:2}, cur=0, rel=null;
+  function get(k,d){ try{ return localStorage.getItem(k)||d; }catch(e){ return d; } }
+  function put(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function d2(n){ return (n<10?'0':'')+n; }
+  function india(s){ var d=new Date(s); return d2(d.getDate())+'-'+d2(d.getMonth()+1)+'-'+d.getFullYear()+' '+d2(d.getHours())+':'+d2(d.getMinutes()); }
+  function meta(){
+    if(!rel) return;
+    (rel.assets||[]).forEach(function(a){
+      if(a.name==='AVNI-Phone.apk') document.getElementById('apkmeta').textContent=T.ver[cur]+rel.tag_name.replace(/^v/,'')+' · '+(a.size/1048576).toFixed(1)+' MB'+T.on[cur]+india(a.updated_at);
+    });
+  }
+  function lang(l){
+    put('avni_dl_lang',l); cur=IDX[l]||0; document.documentElement.lang=l;
+    document.querySelectorAll('[data-t]').forEach(function(n){ var e=T[n.getAttribute('data-t')]; if(e) n.textContent=e[cur]; });
+    document.querySelectorAll('.lang button').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-l')===l); });
+    meta();
+  }
+  document.querySelectorAll('.lang button').forEach(function(b){ b.onclick=function(){ lang(b.getAttribute('data-l')); }; });
+  lang(get('avni_dl_lang','en'));
+  fetch('https://api.github.com/repos/sehgalautoriders/avni/releases/latest').then(function(r){ return r.ok?r.json():null; }).then(function(j){ rel=j; meta(); }).catch(function(){});
+})();
+</script>
+</body>
+</html>
