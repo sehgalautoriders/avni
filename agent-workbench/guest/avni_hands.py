@@ -31,8 +31,10 @@ import json
 import os
 import secrets
 import socket
+import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -51,7 +53,7 @@ try:  # Pillow is a hard requirement for /screenshot only
 except ImportError:  # pragma: no cover - reported at request time
     Image = ImageDraw = ImageFont = None  # type: ignore[assignment]
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 SERVICE = "avni-hands"
 DEFAULT_PORT = 7001
 IS_WINDOWS = sys.platform == "win32"
@@ -101,6 +103,9 @@ class ServerConfig:
     log_path: Path
     pause_path: Path
     archive_dir: Optional[Path] = None
+    allowed_clients: frozenset[str] = frozenset({"127.0.0.1", "::1"})  # empty set = any client
+    shell_enabled: bool = False
+    archive_max_bytes: int = 2 * 1024 ** 3
 
     def is_paused(self) -> bool:
         try:
@@ -293,6 +298,80 @@ def trim_for_log(value: Any, limit: int = 500) -> Any:
     if isinstance(value, (list, tuple)):
         return [trim_for_log(v, limit) for v in value[:50]]
     return value
+
+
+# ---- who may talk to this service -------------------------------------------
+def client_allowed(client_ip: str, allowed: frozenset[str]) -> bool:
+    """Empty allow-list means any client (explicit --allow-any-client). IPv4-mapped
+    IPv6 addresses (::ffff:1.2.3.4) are compared by their IPv4 part."""
+    if not allowed:
+        return True
+    ip = client_ip.strip()
+    if ip.lower().startswith("::ffff:"):
+        ip = ip[7:]
+    return ip in allowed
+
+
+def default_gateway_ipv4() -> Optional[str]:
+    """The guest's default gateway. On the Hyper-V Default Switch that address IS the
+    host, so it is the only remote client the service accepts by default."""
+    if IS_WINDOWS:
+        out = _run_quiet(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                          "(Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | "
+                          "Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1).NextHop"])
+        if out and re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", out.strip()):
+            return out.strip()
+        out = _run_quiet(["route", "print", "-4", "0.0.0.0"])
+        for line in (out or "").splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                return parts[2]
+        return None
+    try:
+        with open("/proc/net/route", encoding="ascii") as fh:
+            for line in fh.readlines()[1:]:
+                fields = line.split()
+                if len(fields) >= 3 and fields[1] == "00000000":
+                    raw = int(fields[2], 16)
+                    return ".".join(str((raw >> (8 * i)) & 0xFF) for i in range(4))
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+_ARCHIVE_NAME = re.compile(r"^\d{8}T\d{6}_\d{6}Z(_\d+)?\.png$")
+
+
+def trim_archive(directory: Path, max_bytes: int) -> list[Path]:
+    """Keep the screenshot archive under max_bytes by removing the OLDEST frames.
+    Only files this service named itself (UTC timestamp pattern) are ever touched;
+    nothing else in the folder is looked at. Returns the removed paths."""
+    removed: list[Path] = []
+    if max_bytes <= 0:
+        return removed
+    try:
+        frames = [p for p in directory.iterdir() if p.is_file() and _ARCHIVE_NAME.match(p.name)]
+    except OSError:
+        return removed
+    frames.sort(key=lambda p: p.name)  # the name is the UTC timestamp, so oldest first
+    total = 0
+    sizes: dict[Path, int] = {}
+    for frame in frames:
+        try:
+            sizes[frame] = frame.stat().st_size
+        except OSError:
+            sizes[frame] = 0
+        total += sizes[frame]
+    for frame in frames:
+        if total <= max_bytes:
+            break
+        try:
+            frame.unlink()
+            removed.append(frame)
+            total -= sizes[frame]
+        except OSError:
+            continue
+    return removed
 
 
 # ---- "is this really a Hyper-V guest?" --------------------------------------
@@ -770,32 +849,52 @@ def _kill_tree(proc: "subprocess.Popen[bytes]") -> None:
         proc.kill()
 
 
-def run_shell(cmd: str, timeout_s: int, cwd: Optional[str]) -> dict[str, Any]:
-    """Run cmd with shell=True in the guest; output capped at 200 KB per stream."""
+def run_shell(cmd: str, timeout_s: float, cwd: Optional[str],
+              abort_check: Callable[[], bool] = lambda: False, poll_s: float = 0.25) -> dict[str, Any]:
+    """Run cmd with shell=True in the guest; output capped at 200 KB per stream.
+
+    The process is polled every poll_s seconds; when abort_check() turns true
+    (the PAUSE file appeared) the whole process tree is killed and the result says
+    aborted=True, code -2. A timeout kills it the same way with code -1. Output goes
+    to temporary files, not pipes, so a chatty command can never deadlock the poll."""
     started = time.perf_counter()
     kwargs: dict[str, Any] = {}
     if IS_WINDOWS:
         kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
     else:
         kwargs["start_new_session"] = True
-    proc = subprocess.Popen(cmd, shell=True, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, **kwargs)
-    timed_out = False
-    try:
-        out, err = proc.communicate(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        _kill_tree(proc)
-        try:
-            out, err = proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            out, err = b"", b""
+    timed_out = aborted = False
+    with tempfile.TemporaryFile() as out_f, tempfile.TemporaryFile() as err_f:
+        proc = subprocess.Popen(cmd, shell=True, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out_f, stderr=err_f, **kwargs)
+        deadline = started + timeout_s
+        while True:
+            try:
+                proc.wait(timeout=poll_s)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            if abort_check():
+                aborted = True
+            elif time.perf_counter() >= deadline:
+                timed_out = True
+            else:
+                continue
+            _kill_tree(proc)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            break
+        out_f.seek(0)
+        err_f.seek(0)
+        out, err = out_f.read(SHELL_OUTPUT_CAP + 1), err_f.read(SHELL_OUTPUT_CAP + 1)
     enc = oem_encoding()
-    stdout, cut_out = cap_output(out or b"", SHELL_OUTPUT_CAP, enc)
-    stderr, cut_err = cap_output(err or b"", SHELL_OUTPUT_CAP, enc)
-    return {"code": -1 if timed_out else proc.returncode, "stdout": stdout, "stderr": stderr,
+    stdout, cut_out = cap_output(out, SHELL_OUTPUT_CAP, enc)
+    stderr, cut_err = cap_output(err, SHELL_OUTPUT_CAP, enc)
+    code = -2 if aborted else (-1 if timed_out else proc.returncode)
+    return {"code": code, "stdout": stdout, "stderr": stderr,
             "duration_ms": int((time.perf_counter() - started) * 1000),
-            "truncated": cut_out or cut_err, "timed_out": timed_out}
+            "truncated": cut_out or cut_err, "timed_out": timed_out, "aborted": aborted}
 
 
 def archive_png(img: Any, directory: Path) -> Path:
@@ -877,6 +976,9 @@ def ep_screenshot(ctx: Ctx) -> Response:
     if ctx.config.archive_dir is not None:
         try:
             ctx.note["archived"] = str(archive_png(img, ctx.config.archive_dir))
+            trimmed = trim_archive(ctx.config.archive_dir, ctx.config.archive_max_bytes)
+            if trimmed:
+                ctx.note["archive_trimmed"] = len(trimmed)
         except OSError as exc:
             ctx.note["archive_error"] = str(exc)
     out = img
@@ -1006,9 +1108,12 @@ def ep_shell(ctx: Ctx) -> dict[str, Any]:
     cwd = ctx.body.get("cwd")
     if cwd is not None and (not isinstance(cwd, str) or not os.path.isdir(cwd)):
         raise ApiError(400, "cwd must be null or an existing directory", field="cwd")
+    if not ctx.config.shell_enabled:
+        raise ApiError(403, "shell is disabled on this workbench; start avni_hands.py with --enable-shell to allow it")
     if ctx.backend.dry_run:  # never execute arbitrary commands on a dev box
-        return {"code": 0, "stdout": "", "stderr": "", "duration_ms": 0, "truncated": False, "timed_out": False}
-    result = run_shell(cmd, timeout_s, cwd)
+        return {"code": 0, "stdout": "", "stderr": "", "duration_ms": 0, "truncated": False, "timed_out": False,
+                "aborted": False}
+    result = run_shell(cmd, timeout_s, cwd, abort_check=ctx.config.is_paused)
     ctx.note["code"] = result["code"]
     return result
 
@@ -1093,6 +1198,10 @@ class Handler(BaseHTTPRequestHandler):
         record: dict[str, Any] = {"ts": iso_now(), "client": self.client_address[0], "method": method, "endpoint": path}
         ctx: Optional[Ctx] = None
         try:
+            if not client_allowed(self.client_address[0], self.server.config.allowed_clients):
+                self.close_connection = True
+                raise ApiError(403, "client address not allowed; only the Hyper-V host (default gateway) and "
+                                    "localhost may use this service (see --allow-client)")
             raw = self._read_body()
             if not token_matches(self.server.config.token, self.headers.get("X-Avni-Token")):
                 raise ApiError(401, "missing or invalid X-Avni-Token")
@@ -1167,6 +1276,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--token-file", default=None, help=r"default: %%LOCALAPPDATA%%\Avni\workbench\hands.token")
     p.add_argument("--archive-dir", default=None, help="also save every /screenshot here as <UTC timestamp>.png")
     p.add_argument("--dry-run", action="store_true", help="log input instead of injecting it; synthetic screenshots")
+    p.add_argument("--allow-client", action="append", default=[], metavar="IP",
+                   help="extra client IP allowed to call the service (repeatable). Default: localhost + the default gateway, "
+                        "which on the Hyper-V Default Switch is the host")
+    p.add_argument("--allow-any-client", action="store_true", help="accept any client IP (NOT recommended)")
+    p.add_argument("--enable-shell", action="store_true", help="enable POST /shell (off by default)")
+    p.add_argument("--archive-max-mb", type=int, default=2048,
+                   help="keep the screenshot archive under this size by removing the oldest frames (default 2048)")
     return p
 
 
@@ -1192,9 +1308,20 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     token_path = Path(args.token_file) if args.token_file else base / "hands.token"
     token, created = load_or_create_token(token_path)
+    if args.allow_any_client:
+        allowed: frozenset[str] = frozenset()
+    else:
+        clients = {"127.0.0.1", "::1"}
+        gateway = default_gateway_ipv4()
+        if gateway:
+            clients.add(gateway)
+        clients.update(c.strip() for c in args.allow_client if c.strip())
+        allowed = frozenset(clients)
     config = ServerConfig(host=args.host, port=args.port, token=token, dry_run=dry_run, token_path=token_path,
                           log_path=base / "hands.log", pause_path=base / "PAUSE",
-                          archive_dir=Path(args.archive_dir) if args.archive_dir else None)
+                          archive_dir=Path(args.archive_dir) if args.archive_dir else None,
+                          allowed_clients=allowed, shell_enabled=bool(args.enable_shell),
+                          archive_max_bytes=max(0, args.archive_max_mb) * 1024 * 1024)
     backend: Backend = DryRunBackend(config.is_paused) if dry_run else Win32Backend(config.is_paused)  # type: ignore[misc]
     try:
         server = HandsServer(config, backend)
@@ -1206,9 +1333,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     say(f"token file : {token_path}" + ("  (newly generated)" if created else ""))
     say(f"log file   : {config.log_path}")
     say(f"pause file : {config.pause_path}  (create it to pause all input)")
+    say("clients    : " + ("ANY (not recommended)" if not allowed else ", ".join(sorted(allowed))))
+    say(f"shell      : {'ENABLED' if config.shell_enabled else 'disabled (--enable-shell to allow)'}")
     log.write({"ts": iso_now(), "endpoint": "(startup)", "version": VERSION, "port": port, "dry_run": dry_run,
                "host": socket.gethostname(), "dpi": getattr(backend, "dpi_mode", None),
-               "token_file": str(token_path), "archive_dir": str(config.archive_dir) if config.archive_dir else None})
+               "token_file": str(token_path), "archive_dir": str(config.archive_dir) if config.archive_dir else None,
+               "allowed_clients": sorted(allowed), "shell_enabled": config.shell_enabled,
+               "archive_max_bytes": config.archive_max_bytes})
     try:
         server.serve_forever()
     except KeyboardInterrupt:

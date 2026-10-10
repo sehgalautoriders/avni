@@ -422,17 +422,17 @@ def run(args: argparse.Namespace) -> int:
                 output_config={"effort": args.effort},
             )
         except anthropic.RateLimitError as e:
-            log.event("api_error", kind="rate_limit", message=str(e))
+            log.event("api_error", error_kind="rate_limit", message=str(e))
             print("rate limited; waiting 30 s")
             time.sleep(30)
             log.step -= 1
             continue
         except anthropic.APIStatusError as e:
-            log.event("api_error", kind="status", status=e.status_code, message=str(e))
+            log.event("api_error", error_kind="status", status=e.status_code, message=str(e))
             print(f"API error {e.status_code}: {e}", file=sys.stderr)
             return 4
         except anthropic.APIConnectionError as e:
-            log.event("api_error", kind="connection", message=str(e))
+            log.event("api_error", error_kind="connection", message=str(e))
             print(f"connection error: {e}", file=sys.stderr)
             return 4
 
@@ -552,6 +552,12 @@ def checkpoint(vm_name: str, log: RunLog) -> None:
 
 
 def default_run_root() -> Path:
+    """Run folders hold every screenshot, so they are bulk data. AVNI_WORKBENCH_DATA
+    (for example E:\\AVNI-Workbench) moves them off the system drive; otherwise they go
+    under %LOCALAPPDATA%\\Avni\\workbench\\runs like the other AVNI paperwork."""
+    env_root = os.environ.get("AVNI_WORKBENCH_DATA")
+    if env_root:
+        return Path(env_root) / "runs"
     if platform.system() == "Windows":
         return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Avni" / "workbench" / "runs"
     return Path.home() / ".avni" / "workbench" / "runs"
@@ -573,7 +579,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
     p.add_argument("--max-steps", type=int, default=60)
     p.add_argument("--max-minutes", type=float, default=45)
-    p.add_argument("--run-dir", default=None, help="where run folders go (default %%LOCALAPPDATA%%\\Avni\\workbench\\runs)")
+    p.add_argument("--run-dir", default=None,
+                   help="where run folders go (default: %%AVNI_WORKBENCH_DATA%%\\runs if that variable is set, "
+                        "else %%LOCALAPPDATA%%\\Avni\\workbench\\runs)")
     p.add_argument("--vm-name", default="AVNI Agent Workbench 01")
     p.add_argument("--checkpoint-before-run", action="store_true", help="Hyper-V checkpoint via Workbench.ps1 before the first action")
     p.add_argument("--dry-run-model", action="store_true", help="no Claude call; exercise every action against the guest service")

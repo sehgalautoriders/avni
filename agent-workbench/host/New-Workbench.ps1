@@ -18,7 +18,8 @@ What it does:
   - Creates: the VHDX (dynamic), the VM, memory (dynamic), processors, Secure
     Boot, virtual TPM, the Guest Service Interface (so the host can copy files
     in later), optional 1920x1080 video, and the Windows ISO as first boot device.
-  - Turns on Enhanced Session Mode on the host (a host-wide Hyper-V setting).
+  - Reads the host-wide Enhanced Session Mode setting and reports it. It changes that
+    setting ONLY when you pass -EnableEnhancedSession (it is a host-wide change).
   - Sets AutomaticStartAction = Nothing so the VM NEVER starts when the host boots.
   - Writes a JSON record to %LOCALAPPDATA%\Avni\reports\workbench-create-dd-MM-yyyy_HHmm.json
   - Prints numbered next steps for a human, one action per line.
@@ -71,6 +72,11 @@ Virtual switch to connect to. Default 'Default Switch'.
 .PARAMETER AllowSystemDrive
 Allow -VhdRoot to be on the system drive (C:). Not recommended.
 
+.PARAMETER EnableEnhancedSession
+Turn on Enhanced Session Mode on the HOST (Set-VMHost -EnableEnhancedSessionMode $true).
+This is a host-wide Hyper-V setting that affects every VM, so it is off unless you ask.
+Without it the script only reports the current value.
+
 .EXAMPLE
 .\New-Workbench.ps1 -VhdRoot D:\HyperV -IsoPath D:\ISO\Win11_Enterprise_Eval.iso
 Creates the VM with the ISO attached. Does not start it.
@@ -105,7 +111,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$SwitchName = 'Default Switch',
 
-    [switch]$AllowSystemDrive
+    [switch]$AllowSystemDrive,
+
+    [switch]$EnableEnhancedSession
 )
 
 Set-StrictMode -Version Latest
@@ -578,8 +586,22 @@ function New-WorkbenchVm {
         }
     }
 
-    $null = Invoke-Step -Optional -Title 'Enhanced Session Mode on the host' -Command 'Set-VMHost -EnableEnhancedSessionMode $true' -Action {
-        Set-VMHost -EnableEnhancedSessionMode $true
+    $esmNow = Invoke-Measure -What 'Enhanced Session Mode on the host (before)' -Method 'Get-VMHost (EnableEnhancedSessionMode)' -Probe {
+        $h = Get-VMHost
+        New-MeasureResult -Value ([string]$h.EnableEnhancedSessionMode) -Display ([string]$h.EnableEnhancedSessionMode)
+    }
+    if ($EnableEnhancedSession) {
+        if ($esmNow.Status -eq 'MEASURED' -and $esmNow.Value -eq 'True') {
+            Write-Tagged -Tag '[SKIPPED]' -Text 'Enhanced Session Mode is already on; nothing changed on the host.' -Color 'DarkGray'
+        }
+        else {
+            $null = Invoke-Step -Optional -Title 'Enhanced Session Mode on the host (you passed -EnableEnhancedSession)' -Command 'Set-VMHost -EnableEnhancedSessionMode $true' -Action {
+                Set-VMHost -EnableEnhancedSessionMode $true
+            }
+        }
+    }
+    else {
+        Write-Tagged -Tag '[NOT CHANGED]' -Text 'Enhanced Session Mode on the host left as it is (host-wide setting; pass -EnableEnhancedSession to turn it on).' -Color 'DarkGray'
     }
 }
 
@@ -702,7 +724,7 @@ function Show-ReadBack {
             New-MeasureResult -Value ([string]$d[0].Path) -Display ([string]$d[0].Path)
         }
     }
-    $null = Invoke-Measure -IsReport -What 'Enhanced Session Mode (host setting)' -Method 'Get-VMHost (EnableEnhancedSessionMode)' -Requested 'True' -Probe {
+    $null = Invoke-Measure -IsReport -What 'Enhanced Session Mode (host setting, not changed unless -EnableEnhancedSession)' -Method 'Get-VMHost (EnableEnhancedSessionMode)' -Probe {
         $h = Get-VMHost
         New-MeasureResult -Value ([string]$h.EnableEnhancedSessionMode) -Display ([string]$h.EnableEnhancedSessionMode)
     }

@@ -12,7 +12,9 @@
       2. Checks Python (py -3 --version, then python --version). If missing it prints and runs
          the exact command:  winget install -e --id Python.Python.3.12 --scope user
       3. Copies the guest folder to %LOCALAPPDATA%\Avni\workbench\hands\ and runs pip install -r requirements.txt.
-      4. Creates the inbound firewall rule "AVNI Hands 7001" (TCP 7001, profiles Private + Domain only).
+      4. Creates the inbound firewall rule "AVNI Hands 7001" (TCP 7001) that accepts ONLY the
+         default gateway address, which on the Hyper-V Default Switch is the host itself.
+         The service also refuses any other client address itself (403).
       5. Registers Scheduled Task \AVNI\Hands that runs pythonw.exe avni_hands.py
          --archive-dir %LOCALAPPDATA%\Avni\workbench\shots at logon of the current user.
       6. Starts the task, waits up to 20 s, then MEASURES the service with
@@ -27,6 +29,10 @@
 
 .PARAMETER ArchiveDir
     Where every screenshot is archived as PNG. Default: %LOCALAPPDATA%\Avni\workbench\shots
+
+.PARAMETER EnableShell
+    Start the service with --enable-shell so POST /shell works. Off by default: the
+    agent then has mouse, keyboard and screen only.
 
 .PARAMETER AllowHost
     Skip the "is this a Hyper-V guest?" safety check. Do NOT use on the physical host:
@@ -45,6 +51,7 @@
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Avni\workbench\hands'),
     [string]$ArchiveDir = (Join-Path $env:LOCALAPPDATA 'Avni\workbench\shots'),
+    [switch]$EnableShell,
     [switch]$AllowHost
 )
 
@@ -156,13 +163,18 @@ Write-Step 'pip install -r requirements.txt'
 if ($LASTEXITCODE -ne 0) { throw "pip install failed (exit $LASTEXITCODE)" }
 
 # --- 4. firewall (admin only) --------------------------------------------------
-Write-Step "firewall rule '$RuleName' (TCP $Port inbound, Private+Domain)"
-$ruleCmd = "New-NetFirewallRule -DisplayName '$RuleName' -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow -Profile Private,Domain"
+$gateway = $null
+try {
+    $gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1).NextHop
+} catch { $gateway = $null }
+if (-not $gateway) { throw 'Could not read the default gateway (Get-NetRoute 0.0.0.0/0). The firewall rule must be limited to the host address; refusing to open the port to everyone.' }
+Write-Step "firewall rule '$RuleName' (TCP $Port inbound, ONLY from the host at $gateway)"
+$ruleCmd = "New-NetFirewallRule -DisplayName '$RuleName' -Direction Inbound -Protocol TCP -LocalPort $Port -RemoteAddress $gateway -Action Allow -Profile Any"
 if (Test-IsAdmin) {
     Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Protocol TCP -LocalPort $Port `
-        -Action Allow -Profile Private, Domain | Out-Null
-    Write-Host '        rule created'
+        -RemoteAddress $gateway -Action Allow -Profile Any | Out-Null
+    Write-Host "        rule created (remote address limited to $gateway)"
 } else {
     Write-Warning "Not elevated: firewall rule skipped. From an ADMIN PowerShell run:`n        $ruleCmd"
 }
@@ -177,7 +189,9 @@ try {
 # --- 5. scheduled task ---------------------------------------------------------
 Write-Step "registering scheduled task $TaskPath$TaskName (at logon of $env:USERDOMAIN\$env:USERNAME)"
 $script = Join-Path $InstallDir 'avni_hands.py'
-$action = New-ScheduledTaskAction -Execute $pythonw -Argument ('"{0}" --archive-dir "{1}"' -f $script, $ArchiveDir) -WorkingDirectory $InstallDir
+$serviceArgs = '"{0}" --archive-dir "{1}"' -f $script, $ArchiveDir
+if ($EnableShell) { $serviceArgs += ' --enable-shell' }
+$action = New-ScheduledTaskAction -Execute $pythonw -Argument $serviceArgs -WorkingDirectory $InstallDir
 $user   = "$env:USERDOMAIN\$env:USERNAME"
 $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user
 # Interactive logon type: the task runs inside the user's desktop session, which SendInput requires.
@@ -219,3 +233,5 @@ Write-Host "Service    : $script"
 Write-Host "Log        : $BaseDir\hands.log"
 Write-Host "Screenshots: $ArchiveDir"
 Write-Host "Pause      : create the file $BaseDir\PAUSE to block all input; delete it to resume"
+Write-Host ("Clients    : localhost and the host at " + $gateway + " only (service refuses others with 403)")
+Write-Host ("Shell      : " + $(if ($EnableShell) { 'ENABLED (--enable-shell)' } else { 'disabled; re-run with -EnableShell to allow POST /shell' }))

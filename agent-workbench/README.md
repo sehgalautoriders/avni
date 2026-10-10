@@ -64,6 +64,24 @@ The architect's proposal is right on the main decision: one true, persistent, is
 
 What I would do if I owned it: run Preflight tomorrow, make decisions 3 and 4 from the printed numbers, create the VM, install Windows by hand once, install the hands service, and spend the first agent run on the five acceptance demos below. Only then talk about clones.
 
+## 4a. Review round 1 (Architect, 10-10-2026) and what changed
+
+The Architect read PR #1 on GitHub and returned two decisions and five findings. All five are addressed on the branch; two are fully closed in code, three are closed as far as code can close them and the rest is a Stage 4 item.
+
+| # | Finding | What changed | State |
+|---|---|---|---|
+| F1 Critical | Hands service answered any client on the virtual network | Service refuses every client except localhost and the default gateway (the host on Default Switch) with 403 before the token check. `--allow-client` / `--allow-any-client` widen it only on purpose. Installer firewall rule now limited to the host address. | Done in code, 13 new tests pass on Linux. Verify in the guest. |
+| F2 High | Screenshots and run records land on C: | Host driver honours `AVNI_WORKBENCH_DATA` (point it at the approved drive). Guest archive capped by `--archive-max-mb`, oldest frames removed, only files the service named itself. The guest archive is inside the VHDX, which already sits on the approved drive. | Partial: set the variable on the host in Stage 1. |
+| F3 High | `/shell` runs anything; Default Switch is not production isolation | `/shell` is off unless started with `--enable-shell`. The PAUSE file now kills a running shell command (measured: under 1 s). | Partial: guest-to-LAN block at the host firewall and guest-only Git identity remain Stage 4 (tracker 14, 23). |
+| F4 Medium | VM creation changed the host-wide Enhanced Session Mode | `New-Workbench.ps1` measures and reports the setting; changes it only with `-EnableEnhancedSession`. | Done, parse-checked. |
+| F5 Medium | Driver crashed with a TypeError on API errors | Real bug (the word `kind` was passed twice). Fixed. | Done; live API error path still unverified. |
+
+Decisions taken: guest Windows = 90-day Enterprise evaluation ISO. VM disk = E: if healthy and roomy, else D:, never C:, confirmed by preflight numbers first.
+
+New house rule from the Architect: the Workbench is registered in AVNI Sentinel as **installed but OFF**. It never becomes a permanently running AVNI process. Tracker item 26.
+
+Honest limits that stay: the token travels over plain HTTP on the host-guest link (acceptable for the pilot, both ends are on one PC). The viewer still takes Ravi's keyboard if he clicks inside it until worker card WC-03 is built.
+
 ## 5. Acceptance: the five demonstrations (measured, not screenshots)
 
 1. Ravi types a document on Desktop 1 while the agent opens Chrome inside the workbench. His cursor position and keyboard focus are checked before and after.
@@ -101,8 +119,8 @@ Each demo gets a line in `TRACKER.xlsx` with: measurement method, measured at, s
 | `host/New-Workbench.ps1` | Creates the VM. Does not start it. Prints the human steps for Windows setup | PowerShell 7 parse only |
 | `host/Workbench.ps1` | Operations: Status, Start, Shutdown, Stop, Checkpoint, Checkpoints, Restore, Ip, Connect, Copy | PowerShell 7 parse only |
 | `host/workbench_driver.py` | Claude computer-use loop mapped onto the guest service. Run-folder recording. STOP file. `--dry-run-model` exercises every action without the model | Linux, against the guest service in dry-run |
-| `guest/avni_hands.py` | Guest-resident screen, mouse, keyboard and shell service. Token auth, PAUSE file, action log, screenshot archive | Linux dry-run only. `SendInput` path unverified |
-| `guest/keymap.py`, `guest/test_keymap.py` | Key-name parsing and request validation, unit-tested | Linux, `python3 -m unittest` |
+| `guest/avni_hands.py` | Guest-resident screen, mouse, keyboard and shell service. Token auth, client allow-list (host + localhost), `/shell` opt-in, PAUSE file, action log, capped screenshot archive | Linux dry-run and 54 unit tests. `SendInput` path unverified |
+| `guest/keymap.py`, `guest/test_keymap.py`, `guest/test_hands_safety.py` | Key-name parsing, request validation, allow-list, archive retention, shell abort, unit-tested | Linux, `python3 -m unittest` |
 | `guest/Install-Hands.ps1` | Installs the service inside the guest, firewall rule, logon task, measured health check | PowerShell 7 parse only |
 | `cards/WORKER-CARDS.md` | Bounded cards for senior workers (ChatGPT Pro, Codex, Antigravity). No worker commits | n/a |
 
@@ -112,7 +130,8 @@ Each demo gets a line in `TRACKER.xlsx` with: measurement method, measured at, s
 2. Owner decisions: licence path, VHDX drive.
 3. `host/New-Workbench.ps1 -VhdRoot <approved drive>\AVNI-VMs -IsoPath <Windows ISO>` in an elevated PowerShell.
 4. Human at the console: Windows setup inside vmconnect (about 40 minutes). Local account. No Microsoft account.
-5. Inside the guest: `winget install` Chrome, VS Code, Git, Python, PowerShell 7. Then `guest/Install-Hands.ps1`.
+5. Inside the guest: `winget install` Chrome, VS Code, Git, Python, PowerShell 7. Then `guest/Install-Hands.ps1` (add `-EnableShell` only if the agent needs a terminal through the service).
+5a. On the host set `AVNI_WORKBENCH_DATA` to a folder on the approved drive so run folders with screenshots stay off C:.
 6. Copy the token file from the guest to the host once (`Workbench.ps1 -Action Copy` goes host to guest; the token comes the other way through a shared clipboard in vmconnect or a one-time read).
 7. `host/Workbench.ps1 -Action Ip`, then `python host/workbench_driver.py --guest <ip> --dry-run-model`. Measured: every action returns ok.
 8. First real task: `--task "Open Notepad, type the date, save to Desktop as test.txt"`. Watch it in vmconnect.

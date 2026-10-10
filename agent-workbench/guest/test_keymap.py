@@ -274,7 +274,7 @@ class DryRunServerTests(unittest.TestCase):
     def test_health_and_auth(self) -> None:
         status, body, _ = self.jcall("GET", "/health")
         self.assertEqual(status, 200)
-        self.assertEqual((body["service"], body["version"], body["screen"]), ("avni-hands", "0.1.0", {"width": 1280, "height": 720}))
+        self.assertEqual((body["service"], body["version"], body["screen"]), ("avni-hands", hands.VERSION, {"width": 1280, "height": 720}))
         self.assertEqual(self.jcall("GET", "/health", token=None)[0], 401)
         self.assertEqual(self.jcall("GET", "/health", token="wrong")[0], 401)
 
@@ -319,9 +319,12 @@ class DryRunServerTests(unittest.TestCase):
         self.assertIn(429, codes)
         self.assertEqual(codes[0], 200)
 
-    def test_shell_not_executed_in_dry_run(self) -> None:
+    def test_shell_disabled_by_default(self) -> None:
+        # Review round 1: /shell is opt-in (--enable-shell). The dry-run execution path is
+        # covered in test_hands_safety.ServerPolicy.test_shell_enabled_dry_run.
         status, body, _ = self.jcall("POST", "/shell", {"cmd": "echo hi"})
-        self.assertEqual((status, body["code"], body["dry_run"], body["truncated"]), (200, 0, True, False))
+        self.assertEqual(status, 403)
+        self.assertIn("--enable-shell", body["error"])
 
     def test_log_is_written(self) -> None:
         self.jcall("POST", "/wait", {"ms": 1})
