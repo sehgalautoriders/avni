@@ -50,7 +50,7 @@ jobs:
       - name: Drives seen by the engine
         run: ./target/release/avni-scan.exe drives
 
-      - name: Real NTFS check - raw MFT of C: vs the Windows folder listing
+      - name: "Real NTFS check - raw MFT of C: vs the Windows folder listing"
         run: |
           ./target/release/avni-scan.exe mft C:
           ./target/release/avni-scan.exe compare C: 'C:\' --sub 'Program Files' --max 40 --tolerance 0.001
@@ -58,8 +58,9 @@ jobs:
           ./target/release/avni-scan.exe compare C: 'C:\' --sub 'Windows\System32' --max 40 --tolerance 0.001
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Bench - Quick scan of C: (metadata + duplicates, 5 min budget) with Excel report
-        run: ./target/release/avni-scan.exe scan C: --budget 300 --report "$env:RUNNER_TEMP\avni-report"
+      - name: "Bench - Quick scan of C: (metadata + duplicates, 5 min budget) with Excel report"
+        run: |
+          ./target/release/avni-scan.exe scan C: --budget 300 --report "$env:RUNNER_TEMP\avni-report"
 
       - name: UI typecheck and lint
         working-directory: drive-scanner/app
