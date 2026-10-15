@@ -6,3 +6,8 @@ https://sehgalautoriders.github.io/avni/ - Android only, for Ravi and family (un
 - `publish.ps1` - puts the current promoted AVNI Phone APK here as release `v<version>` with asset `AVNI-Phone.apk`.
   Runs from the scheduled task `\AVNI\AVNI Phone Download Page` in the day window (06:30-22:30). It never builds,
   versions or installs (Directive 0015); it checks the sha256 against the canonical provenance first.
+
+## AVNI Drive Scanner
+
+`drive-scanner/` - native Windows app that scans every drive (NTFS MFT reader), finds duplicates under THE TREE LAW,
+evaluates every file against the C: / D: / Google Drive / Supabase pattern and acts only on clicks. See `drive-scanner/README.md`.
