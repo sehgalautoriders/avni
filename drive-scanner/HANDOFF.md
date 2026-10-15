@@ -23,8 +23,13 @@ Branch `ccr-2aef8dcd-du1iqm`, repo `sehgalautoriders/avni`, folder `drive-scanne
   - THE TREE LAW (port of AvniClean) and the location rules.
   - Actions, Excel/CSV, Supabase publisher.
   - `avni-scan` CLI for verification.
-- **Tauri 2 + React app** (`app/`): 8 tabs (Drives, Progress, Summary, Files, Duplicates, Plan & Actions, Reports, Settings),
+- **Tauri 2 + React app** (`app/`): 9 tabs (Drives, Progress, Summary, Files, Duplicates, Plan & Actions, Finished, Reports, Settings),
   dark and light themes, tables, nothing automatic.
+- **Everything inside the app** (Ravi, 15-10-2026: *"Shows all files in the app only there itself"*):
+  - The Finished tab lists every finished file and where it is now. For a removed duplicate it names the copy that was kept.
+  - A preview panel shows photos, text, folders, PDF, video and audio. Google Drive and cloud-only files are never read for a preview.
+  - Excel reports open in the app with one tab per sheet; CSV reports and action logs open there too.
+  - "Open in Windows" and "Show in folder" are second buttons only.
 - **CI** (`.github/workflows/drive-scanner.yml`):
   - Builds the portable Windows exe.
   - Runs MFT vs Windows' own listing on a real NTFS C:.
