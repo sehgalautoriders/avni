@@ -1,0 +1,86 @@
+# AVNI Drive Scanner: builds the Windows app and checks the engine on a real Windows NTFS drive.
+# It never publishes a release (the AVNI Phone page reads "latest" from this repo's releases); the exe is a
+# workflow artifact.
+name: AVNI Drive Scanner
+
+on:
+  push:
+    branches: [main]
+    paths: ["drive-scanner/**", ".github/workflows/drive-scanner.yml"]
+  pull_request:
+    paths: ["drive-scanner/**", ".github/workflows/drive-scanner.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drive-scanner-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: drive-scanner
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: drive-scanner/app/package-lock.json
+
+      - name: Rust toolchain
+        run: rustup update stable --no-self-update; rustup default stable; rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: drive-scanner
+
+      - name: Engine tests
+        run: cargo test -p avni-scan --release
+
+      - name: Engine CLI
+        run: cargo build -p avni-scan --release
+
+      - name: Drives seen by the engine
+        run: ./target/release/avni-scan.exe drives
+
+      - name: "Real NTFS check - raw MFT of C: vs the Windows folder listing"
+        run: |
+          ./target/release/avni-scan.exe mft C:
+          ./target/release/avni-scan.exe compare C: 'C:\' --sub 'Program Files' --max 40 --tolerance 0.001
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./target/release/avni-scan.exe compare C: 'C:\' --sub 'Windows\System32' --max 40 --tolerance 0.001
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: "Bench - Quick scan of C: (metadata + duplicates, 5 min budget) with Excel report"
+        run: |
+          ./target/release/avni-scan.exe scan C: --budget 300 --report "$env:RUNNER_TEMP\avni-report"
+
+      - name: UI typecheck and lint
+        working-directory: drive-scanner/app
+        run: |
+          npm ci
+          npx tsc -b
+          npx oxlint src
+
+      - name: Build the app (portable exe - no installer, no shortcuts)
+        working-directory: drive-scanner/app
+        run: npx tauri build --no-bundle
+
+      - name: Exe facts
+        run: |
+          $f = Get-Item target/release/avni-drive-scanner.exe
+          "{0:N1} MB  sha256 {1}" -f ($f.Length / 1MB), (Get-FileHash $f -Algorithm SHA256).Hash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AVNI-Drive-Scanner-windows-x64
+          path: drive-scanner/target/release/avni-drive-scanner.exe
+          retention-days: 90

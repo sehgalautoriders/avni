@@ -1,0 +1,31 @@
+{
+  "name": "avni-drive-scanner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "lint": "oxlint src",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.101.4",
+    "@tauri-apps/api": "2.12.4",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@tauri-apps/cli": "2.12.3",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "oxlint": "1.88.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.2.4"
+  }
+}

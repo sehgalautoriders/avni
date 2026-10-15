@@ -1,0 +1,150 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Colour tokens. Light is the default; the `.dark` class on <html> switches them. */
+:root {
+  color-scheme: light;
+  --bg: #e9ecf1;
+  --surface: #ffffff;
+  --surface-2: #dfe3ea;
+  --surface-3: #f1f3f7;
+  --fg: #111418;
+  --muted: #465061;
+  --line: #8b94a3;
+  --line-soft: #d3d8e0;
+  --accent-text: #b33f00;
+  --danger: #a8001c;
+  --danger-bg: #fde8ea;
+  --warn: #5a4200;
+  --warn-bg: #fff1b8;
+  --ok: #0a6b2d;
+  --ok-bg: #dcf5e4;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0d0f12;
+  --surface: #171a1f;
+  --surface-2: #252a32;
+  --surface-3: #1e2228;
+  --fg: #f3f5f7;
+  --muted: #aeb6c2;
+  --line: #5b6471;
+  --line-soft: #2e343d;
+  --accent-text: #ff9559;
+  --danger: #ff9a93;
+  --danger-bg: #3a1618;
+  --warn: #ffe08a;
+  --warn-bg: #3b300a;
+  --ok: #7ae6a2;
+  --ok-bg: #11341f;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-accent: #e8590b;
+  --color-accent-text: var(--accent-text);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-header: #15181c;
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Noto Sans", Roboto, Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden; /* the window is the frame: panels and tables scroll inside it */
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+@layer components {
+  /* Data tables: sticky header, comfortable rows, numbers right-aligned. */
+  .tbl {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.875rem;
+  }
+  .tbl th,
+  .tbl td {
+    padding: 0.4rem 0.65rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .tbl thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface-2);
+    font-weight: 600;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .tbl thead th.wrap {
+    white-space: normal;
+    min-width: 5.5rem;
+  }
+  .tbl tbody td {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .tbl tbody tr:hover td {
+    background: var(--surface-3);
+  }
+  .tbl .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .tbl tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    background: var(--surface-2);
+    font-weight: 600;
+    border-top: 1px solid var(--line);
+  }
+  .tbl tbody tr.grp td {
+    background: var(--surface-2);
+    font-weight: 600;
+    border-top: 1px solid var(--line);
+  }
+  .tbl tbody tr.grp:hover td {
+    background: var(--surface-2);
+  }
+  .tbl tbody tr.clickable {
+    cursor: default;
+  }
+  .tbl tbody tr:focus-visible {
+    outline-offset: -2px;
+  }
+}

@@ -1,0 +1,40 @@
+[package]
+name = "avni-scan"
+description = "AVNI Drive Scanner engine: drive enumeration, NTFS MFT reader, folder walk, BLAKE3 dedup, rules, reports, actions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "avni_scan"
+path = "src/lib.rs"
+
+[[bin]]
+name = "avni-scan"
+path = "src/bin/avni-scan.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+blake3 = "1.8"
+bzip2 = "0.6.1"
+calamine = "0.36.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+crossbeam-channel = "0.5.17"
+csv = "1.4.0"
+flate2 = "1.1.10"
+rayon = "1.12.0"
+regex = "1"
+rust_xlsxwriter = { version = "0.99.1", features = ["constant_memory", "chrono", "ryu"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sevenz-rust2 = "0.24.0"
+sha2 = "0.11.1"
+tar = "0.4.46"
+ureq = { version = "3.4.2", features = ["json"] }
+zip = { version = "9.0.3", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl", "Win32_Security", "Win32_Security_Cryptography", "Win32_System_Threading", "Win32_UI_Shell", "Win32_System_SystemInformation", "Win32_System_WindowsProgramming", "Win32_UI_WindowsAndMessaging", "Win32_System_Memory", "Win32_System_Com"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
