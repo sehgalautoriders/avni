@@ -4,10 +4,11 @@ import {
   useRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
   type KeyboardEventHandler,
   type ReactNode,
 } from 'react';
-import { VERDICT_LABEL, type SortKey, type Verdict } from '../api';
+import { VERDICT_LABEL, type FinishedResult, type SortKey, type Verdict } from '../api';
 import { errMsg } from '../lib/errors';
 import { exactBytes, formatBytes, formatCount, formatDate } from '../lib/format';
 
@@ -255,6 +256,44 @@ export function VerdictPill({ verdict }: { verdict: Verdict }) {
       {VERDICT_LABEL[verdict]}
     </span>
   );
+}
+
+const RESULT_CLASS: Record<FinishedResult, string> = {
+  ok: 'border-ok bg-ok-bg text-ok',
+  skipped: 'border-line bg-surface-2 text-fg',
+  failed: 'border-danger bg-danger-bg text-danger',
+};
+
+const RESULT_LABEL: Record<FinishedResult, string> = { ok: 'Done', skipped: 'Skipped', failed: 'Failed' };
+
+export const resultLabel = (r: FinishedResult): string => RESULT_LABEL[r];
+
+export function ResultPill({ result }: { result: FinishedResult }) {
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${RESULT_CLASS[result]}`}
+    >
+      {RESULT_LABEL[result]}
+    </span>
+  );
+}
+
+/** Arrow keys move between table rows, so a long table is one tab stop instead of hundreds. Put it on the TableFrame. */
+export function moveRowFocus(e: ReactKeyboardEvent<HTMLDivElement>): void {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const down = e.key === 'ArrowDown';
+  const row = e.target instanceof HTMLElement ? e.target.closest('tr') : null;
+  const next = row
+    ? down
+      ? row.nextElementSibling
+      : row.previousElementSibling
+    : down
+      ? e.currentTarget.querySelector('tbody tr')
+      : null;
+  if (next instanceof HTMLElement) {
+    e.preventDefault();
+    next.focus();
+  }
 }
 
 /** Human size with the exact byte count in the tooltip. */

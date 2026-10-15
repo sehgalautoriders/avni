@@ -2,7 +2,26 @@ import { create } from 'zustand';
 import type { ActionProgress, ActionResult, Phase, ReportFiles, ScanProgress } from './api';
 import { applyTheme, readSavedTheme, saveTheme, systemTheme, type Theme } from './lib/theme';
 
-export type TabId = 'drives' | 'progress' | 'summary' | 'files' | 'duplicates' | 'actions' | 'reports' | 'settings';
+export type TabId =
+  | 'drives'
+  | 'progress'
+  | 'summary'
+  | 'files'
+  | 'duplicates'
+  | 'actions'
+  | 'finished'
+  | 'reports'
+  | 'settings';
+
+/** What the right-hand preview drawer is showing. `nonce` makes opening the same path again start fresh. */
+export interface PreviewTarget {
+  path: string;
+  nonce: number;
+  /** Open the table viewer on it whatever the file looks like (reports, action logs). */
+  table: boolean;
+}
+
+let previewNonce = 0;
 
 const ACTIVE_PHASES: Phase[] = ['metadata', 'rules', 'sampling', 'verifying', 'hashing'];
 const FINISHED_PHASES: Phase[] = ['done', 'cancelled', 'failed'];
@@ -16,6 +35,15 @@ const MAX_REPORT_LINES = 200;
 interface AppState {
   tab: TabId;
   setTab: (tab: TabId) => void;
+
+  preview: PreviewTarget | null;
+  openPreview: (path: string, opts?: { table?: boolean }) => void;
+  closePreview: () => void;
+
+  /** The Finished tab shows only this action log's rows when set ("This run only"). */
+  finishedLog: string | null;
+  showFinished: (logPath: string | null) => void;
+  clearFinishedLog: () => void;
 
   theme: Theme;
   savedChoice: boolean;
@@ -53,7 +81,18 @@ applyTheme(initialTheme); // before the first paint, so there is no flash of the
 
 export const useApp = create<AppState>()((set) => ({
   tab: 'drives',
-  setTab: (tab) => set({ tab }),
+  setTab: (tab) => set({ tab, preview: null }),
+
+  preview: null,
+  openPreview: (path, opts) => {
+    previewNonce += 1;
+    set({ preview: { path, nonce: previewNonce, table: opts?.table ?? false } });
+  },
+  closePreview: () => set({ preview: null }),
+
+  finishedLog: null,
+  showFinished: (logPath) => set({ tab: 'finished', preview: null, finishedLog: logPath }),
+  clearFinishedLog: () => set({ finishedLog: null }),
 
   theme: initialTheme,
   savedChoice: saved !== null,

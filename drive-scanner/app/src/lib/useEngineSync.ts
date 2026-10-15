@@ -12,7 +12,7 @@ function refresh(qc: QueryClient, keys: readonly (readonly string[])[]): void {
 
 export const refreshAfterScan = (qc: QueryClient): void => refresh(qc, [qk.summary, qk.files, qk.dups, qk.drives]);
 export const refreshAfterAction = (qc: QueryClient): void =>
-  refresh(qc, [qk.summary, qk.files, qk.dups, qk.drives, qk.history]);
+  refresh(qc, [qk.summary, qk.files, qk.dups, qk.drives, qk.history, qk.finished, qk.preview]);
 
 /**
  * The one place that talks to engine events. Call it once, at the top of the app:

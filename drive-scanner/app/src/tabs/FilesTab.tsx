@@ -1,5 +1,5 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, VERDICT_LABEL, type FileQuery, type FileRow, type SortKey, type Verdict } from '../api';
 import {
   CheckField,
@@ -16,11 +16,13 @@ import {
   TableFrame,
   VerdictPill,
   DateText,
+  moveRowFocus,
 } from '../components/ui';
 import { useDebounced } from '../lib/hooks';
 import { formatBytes, formatCount, shortHash } from '../lib/format';
 import { isVerdict, VERDICT_ORDER } from '../lib/labels';
 import { qk, useSummary } from '../lib/queries';
+import { useApp } from '../store';
 
 const PAGE_SIZE = 200;
 
@@ -67,25 +69,7 @@ function toQuery(f: Filters, search: string, ext: string, minMb: string): FileQu
   };
 }
 
-/** Arrow keys move between rows, so the table is one tab stop instead of 200. */
-function moveRowFocus(e: KeyboardEvent<HTMLDivElement>): void {
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-  const down = e.key === 'ArrowDown';
-  const row = e.target instanceof HTMLElement ? e.target.closest('tr') : null;
-  const next = row
-    ? down
-      ? row.nextElementSibling
-      : row.previousElementSibling
-    : down
-      ? e.currentTarget.querySelector('tbody tr')
-      : null;
-  if (next instanceof HTMLElement) {
-    e.preventDefault();
-    next.focus();
-  }
-}
-
-function FileRowView({ row, onReveal }: { row: FileRow; onReveal: (path: string) => void }) {
+function FileRowView({ row, onOpen }: { row: FileRow; onOpen: (path: string) => void }) {
   const hashTitle = [row.blake3 && `BLAKE3: ${row.blake3}`, row.sha256 && `SHA-256: ${row.sha256}`, row.sample && `Sample: ${row.sample}`]
     .filter(Boolean)
     .join('\n');
@@ -93,10 +77,11 @@ function FileRowView({ row, onReveal }: { row: FileRow; onReveal: (path: string)
     <tr
       className="clickable"
       tabIndex={-1}
-      title="Double-click (or press Enter) to show this in its folder"
-      onDoubleClick={() => onReveal(row.path)}
+      title="Click (or press Enter) to see this file here"
+      onClick={() => onOpen(row.path)}
+      onDoubleClick={() => onOpen(row.path)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onReveal(row.path);
+        if (e.key === 'Enter') onOpen(row.path);
       }}
     >
       <td>
@@ -148,7 +133,7 @@ export function FilesTab() {
     placeholderData: keepPreviousData,
     enabled: !!summaryQ.data,
   });
-  const reveal = useMutation({ mutationFn: (path: string) => api.revealPath(path) });
+  const openPreview = useApp((s) => s.openPreview);
 
   const page = filesQ.data;
   const typing = f.search !== search || f.ext !== ext || f.minMb !== minMb;
@@ -244,7 +229,7 @@ export function FilesTab() {
         </div>
       </div>
 
-      <ErrorText error={filesQ.error ?? reveal.error} />
+      <ErrorText error={filesQ.error} />
 
       <TableFrame label="List of files" className={updating && page ? 'opacity-70' : ''} onKeyDown={moveRowFocus}>
         {!page ? (
@@ -274,7 +259,7 @@ export function FilesTab() {
                   </td>
                 </tr>
               ) : (
-                page.rows.map((row) => <FileRowView key={row.id} row={row} onReveal={reveal.mutate} />)
+                page.rows.map((row) => <FileRowView key={row.id} row={row} onOpen={openPreview} />)
               )}
             </tbody>
           </table>

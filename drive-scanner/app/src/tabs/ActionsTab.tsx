@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { ACTION_LABEL, type ActionKind, type ActionResult } from '../api';
 import { ActionOutcome, ActionRunning } from '../components/ActionLive';
 import { ActionPreviewModal } from '../components/ActionPreviewModal';
-import { PathButtons } from '../components/PathButtons';
 import { VerdictByDrive } from '../components/VerdictTables';
 import {
   Button,
@@ -77,6 +76,8 @@ function ActionTable({ onPreview, disabled }: { onPreview: (kind: ActionKind) =>
 }
 
 function HistoryTable({ rows }: { rows: ActionResult[] }) {
+  const showFinished = useApp((s) => s.showFinished);
+  const openPreview = useApp((s) => s.openPreview);
   const latestFirst = [...rows].sort((a, b) => b.started_ms - a.started_ms);
   return (
     <TableFrame label="Past actions" fit className="max-h-80">
@@ -112,7 +113,18 @@ function HistoryTable({ rows }: { rows: ActionResult[] }) {
                   <Size bytes={r.bytes} />
                 </td>
                 <td className="num">{formatDuration(r.ms)}</td>
-                <td>{r.log_path ? <PathButtons path={r.log_path} openLabel="Open log" showFolder={false} /> : '—'}</td>
+                <td>
+                  <div className="flex flex-wrap gap-2">
+                    <Button small onClick={() => showFinished(r.log_path || null)}>
+                      Finished files
+                    </Button>
+                    {r.log_path && (
+                      <Button small onClick={() => openPreview(r.log_path, { table: true })}>
+                        View log
+                      </Button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))
           )}

@@ -178,6 +178,9 @@ fn child_zone(parent: Zone, parent_name: &str, name: &str) -> Zone {
                 System("Windows volume data")
             } else if name == "$recycle.bin" || name == "recycler" {
                 Junk("Recycle Bin contents — Empty Recycle Bin frees the space")
+            } else if name.starts_with('$') {
+                // $Extend and other NTFS metadata folders: part of the file system itself.
+                System("NTFS metadata")
             } else if name.starts_with("found.") {
                 Other
             } else {
@@ -520,6 +523,7 @@ mod tests {
             ("$RECYCLE.BIN\\y.bin", 10),
             ("Backups\\old.7z", 10),
             ("Manuals Project\\.avniprotect", 0),
+            ("$Extend\\$ObjId", 0),
             ("Manuals Project\\Hero\\manual.pdf", 10),
         ];
         let g = [("My Drive\\Movies\\film.mkv", 7_000_000), ("My Drive\\x.ahk", 3)];
@@ -564,6 +568,7 @@ mod tests {
             ("D:", "$RECYCLE.BIN\\y.bin", Junk),
             ("D:", "Backups\\old.7z", Extract),
             ("D:", "Manuals Project\\Hero\\manual.pdf", Protected),
+            ("D:", "$Extend\\$ObjId", Keep),
             ("G:", "My Drive\\Movies\\film.mkv", Keep),
             ("G:", "My Drive\\x.ahk", Keep),
         ];

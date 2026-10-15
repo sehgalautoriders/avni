@@ -24,6 +24,7 @@ export function ActionPreviewModal({
     staleTime: 0,
   });
   const [understood, setUnderstood] = useState(false);
+  const openPreview = useApp((s) => s.openPreview);
 
   const run = useMutation({
     mutationFn: () => api.runAction(req),
@@ -123,8 +124,15 @@ export function ActionPreviewModal({
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.id}>
-                        <td className="w-full min-w-56 break-all" title={r.path}>
-                          {r.path}
+                        <td className="w-full min-w-56 break-all">
+                          <button
+                            type="button"
+                            className="text-left hover:underline"
+                            title="Click to see this file here"
+                            onClick={() => openPreview(r.path)}
+                          >
+                            {r.path}
+                          </button>
                         </td>
                         <td className="num">
                           <Size bytes={r.size} />

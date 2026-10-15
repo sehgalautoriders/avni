@@ -5,14 +5,26 @@ import { PathButtons } from '../components/PathButtons';
 import { Button, CheckField, DateText, ErrorText, Loading, Panel, SectionTitle, Size, TableFrame } from '../components/ui';
 import { errMsg } from '../lib/errors';
 import { formatCount, formatDuration } from '../lib/format';
+import { baseName, isTableName } from '../lib/path';
 import { qk, useReports } from '../lib/queries';
 import { useApp } from '../store';
 
-function PathLine({ label, path }: { label: string; path: string }) {
+/** "Avni Drive Scan 2026-10-15 - C.csv" -> "View CSV C:". Falls back to "View CSV". */
+function csvViewLabel(path: string): string {
+  const part = /- ([^-]+?)(?: \(\d+\))?\.csv$/i.exec(baseName(path))?.[1]?.trim();
+  if (!part) return 'View CSV';
+  return `View CSV ${part.length === 1 ? `${part.toUpperCase()}:` : part}`;
+}
+
+/** One file of the result: a primary View button (when it can be viewed here), its name, and the small Windows buttons. */
+function ResultLine({ viewLabel, path, table = true }: { viewLabel: string; path: string; table?: boolean }) {
+  const openPreview = useApp((s) => s.openPreview);
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <span className="font-semibold">{label}</span>
-      <span className="break-all text-sm" title={path}>
+    <li className="flex flex-wrap items-start gap-x-3 gap-y-1">
+      <Button small variant="primary" onClick={() => openPreview(path, { table })}>
+        {viewLabel}
+      </Button>
+      <span className="min-w-0 flex-1 basis-56 break-all pt-1 text-sm" title={path}>
         {path}
       </span>
       <PathButtons path={path} />
@@ -27,12 +39,14 @@ function ReportResult({ r }: { r: ReportFiles }) {
         Done — {formatCount(r.rows)} rows in {formatDuration(r.ms)}
       </SectionTitle>
       <ul className="flex flex-col gap-2">
-        <PathLine label="Folder" path={r.folder} />
-        <PathLine label="Excel" path={r.xlsx} />
+        <ResultLine viewLabel="View Excel" path={r.xlsx} />
         {r.csv.map((p) => (
-          <PathLine key={p} label="CSV" path={p} />
+          <ResultLine key={p} viewLabel={csvViewLabel(p)} path={p} />
         ))}
       </ul>
+      <p className="break-all text-xs text-muted">
+        Saved in {r.folder} — you do not need to look for it: use the View buttons above.
+      </p>
     </section>
   );
 }
@@ -40,6 +54,7 @@ function ReportResult({ r }: { r: ReportFiles }) {
 export function ReportsTab() {
   const qc = useQueryClient();
   const reportsQ = useReports();
+  const openPreview = useApp((s) => s.openPreview);
   const busy = useApp((s) => s.reportBusy);
   const messages = useApp((s) => s.reportMessages);
   const result = useApp((s) => s.reportResult);
@@ -53,6 +68,7 @@ export function ReportsTab() {
       const files = await api.exportReports(includeAll);
       useApp.getState().finishReport(files, null);
       void qc.invalidateQueries({ queryKey: qk.reports });
+      void qc.invalidateQueries({ queryKey: qk.table });
     } catch (e) {
       useApp.getState().finishReport(null, errMsg(e));
     }
@@ -122,7 +138,16 @@ export function ReportsTab() {
                       <DateText ms={r.modified_ms} />
                     </td>
                     <td>
-                      <PathButtons path={r.path} />
+                      <div className="flex flex-wrap items-start gap-2">
+                        <Button
+                          small
+                          variant="primary"
+                          onClick={() => openPreview(r.path, { table: isTableName(r.name) })}
+                        >
+                          View
+                        </Button>
+                        <PathButtons path={r.path} />
+                      </div>
                     </td>
                   </tr>
                 ))

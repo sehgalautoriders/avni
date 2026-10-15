@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { ACTION_LABEL, api, type ActionProgress, type ActionResult } from '../api';
 import { formatCount, formatDate, formatDuration } from '../lib/format';
+import { useApp } from '../store';
 import { PathButtons } from './PathButtons';
 import { Button, ErrorText, Notice, SectionTitle, Size, Spinner } from './ui';
 
@@ -64,6 +65,8 @@ export function ActionRunning({ progress }: { progress: ActionProgress | null })
 
 /** What the last action did. */
 export function ActionOutcome({ result, onDismiss }: { result: ActionResult; onDismiss: () => void }) {
+  const showFinished = useApp((s) => s.showFinished);
+  const openPreview = useApp((s) => s.openPreview);
   return (
     <section
       aria-label="Result of the last action"
@@ -101,17 +104,21 @@ export function ActionOutcome({ result, onDismiss }: { result: ActionResult; onD
           ))}
         </ul>
       )}
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className="text-muted">Started {formatDate(result.started_ms)}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Button variant="primary" onClick={() => showFinished(result.log_path || null)}>
+          See the finished files
+        </Button>
         {result.log_path && (
           <>
-            <span className="break-all" title={result.log_path}>
-              Log: {result.log_path}
-            </span>
-            <PathButtons path={result.log_path} openLabel="Open log" showFolder={false} />
+            <Button onClick={() => openPreview(result.log_path, { table: true })}>View log</Button>
+            <PathButtons path={result.log_path} openLabel="Open in Excel" showFolder={false} />
           </>
         )}
       </div>
+      <p className="break-all text-xs text-muted" title={result.log_path}>
+        Started {formatDate(result.started_ms)}
+        {result.log_path && ` · Log: ${result.log_path}`}
+      </p>
     </section>
   );
 }

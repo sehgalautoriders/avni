@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { api, inTauri } from './api';
+import { PreviewDrawer } from './components/PreviewDrawer';
 import { Button, ErrorText } from './components/ui';
 import { isEngineMissing } from './lib/errors';
 import { ENGINE_MISSING_TEXT } from './lib/labels';
@@ -8,6 +9,7 @@ import { useEngineSync } from './lib/useEngineSync';
 import { ActionsTab } from './tabs/ActionsTab';
 import { DrivesTab } from './tabs/DrivesTab';
 import { DuplicatesTab } from './tabs/DuplicatesTab';
+import { FinishedTab } from './tabs/FinishedTab';
 import { FilesTab } from './tabs/FilesTab';
 import { ProgressTab } from './tabs/ProgressTab';
 import { ReportsTab } from './tabs/ReportsTab';
@@ -22,6 +24,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'files', label: 'Files' },
   { id: 'duplicates', label: 'Duplicates' },
   { id: 'actions', label: 'Plan & Actions' },
+  { id: 'finished', label: 'Finished' },
   { id: 'reports', label: 'Reports' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -40,6 +43,8 @@ function ActivePanel({ tab }: { tab: TabId }) {
       return <DuplicatesTab />;
     case 'actions':
       return <ActionsTab />;
+    case 'finished':
+      return <FinishedTab />;
     case 'reports':
       return <ReportsTab />;
     case 'settings':
@@ -172,6 +177,7 @@ export function App() {
           <main className="min-h-0 flex-1">
             <ActivePanel tab={tab} />
           </main>
+          <PreviewDrawer />
         </>
       )}
     </div>

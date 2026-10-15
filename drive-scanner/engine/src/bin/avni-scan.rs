@@ -5,6 +5,7 @@
 //!   avni-scan walk <folder> [--list]
 //!   avni-scan compare <C: | image> <folder that is that volume's root> [--sub <relative folder>] [--max <n>] [--tolerance 0.001]
 //!   avni-scan scan <drive or folder>... [--deep] [--sha256] [--budget <secs>] [--min-size <bytes>] [--report <dir>]
+//!   avni-scan table <csv|xlsx> [sheet] [offset] [search]
 //!
 //! `compare` reads the same files two independent ways (raw MFT vs the Windows folder listing) and reports every
 //! difference in name, size, folder flag and modified time. Exit code 0 = identical.
@@ -324,8 +325,33 @@ fn main() {
                 }
             }
         }
+        "table" => {
+            // avni-scan table <csv|xlsx> [sheet] [offset] [search]
+            let q = TableQuery {
+                path: args.get(1).cloned().unwrap_or_default(),
+                sheet: args.get(2).cloned().filter(|s| !s.is_empty()),
+                offset: args.get(3).and_then(|v| v.parse().ok()).unwrap_or(0),
+                search: args.get(4).cloned(),
+                limit: 5,
+            };
+            let t = Instant::now();
+            match avni_scan::viewer::read_table(&q, &mut Default::default()) {
+                Ok(p) => {
+                    println!("sheets {:?} | sheet {:?} | total {} | {:.2} s", p.sheets, p.sheet, p.total, t.elapsed().as_secs_f64());
+                    println!("headers {:?}", p.headers);
+                    for r in &p.rows {
+                        println!("  {r:?}");
+                    }
+                    0
+                }
+                Err(e) => {
+                    eprintln!("table failed: {e}");
+                    2
+                }
+            }
+        }
         _ => {
-            eprintln!("commands: drives | mft | walk | compare | scan (see the top of src/bin/avni-scan.rs)");
+            eprintln!("commands: drives | mft | walk | compare | scan | table (see the top of src/bin/avni-scan.rs)");
             64
         }
     };

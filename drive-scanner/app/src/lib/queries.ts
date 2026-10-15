@@ -11,6 +11,9 @@ export const qk = {
   reports: ['reports'],
   files: ['files'],
   dups: ['dups'],
+  finished: ['finished'],
+  preview: ['preview'],
+  table: ['table'],
 } as const;
 
 export const useAppInfo = (enabled = true) =>

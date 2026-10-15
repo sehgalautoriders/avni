@@ -14,10 +14,12 @@ import {
 } from '../components/ui';
 import { formatCount } from '../lib/format';
 import { qk, useSummary } from '../lib/queries';
+import { useApp } from '../store';
 
 const GROUPS_PER_PAGE = 50;
 
 function GroupRows({ g }: { g: DupGroup }) {
+  const openPreview = useApp((s) => s.openPreview);
   return (
     <>
       <tr className="grp">
@@ -57,7 +59,14 @@ function GroupRows({ g }: { g: DupGroup }) {
             </span>
           </td>
           <td className="break-all" title={m.reason}>
-            {m.path}
+            <button
+              type="button"
+              className="text-left hover:underline"
+              title="Click to see this file here"
+              onClick={() => openPreview(m.path)}
+            >
+              {m.path}
+            </button>
             <div className="text-xs text-muted">{m.reason}</div>
           </td>
           <td className="w-40">
