@@ -5,8 +5,8 @@ Mirror of TRACKER.xlsx (same rows). Statuses: Done / Partial / Pending / Can be 
 | Item | Status | Time taken | ETA | Notes |
 |---|---|---|---|---|
 | 1. Drive picker: every drive, Select all, type, filesystem, size, free, HDD/SSD | Partial | 15-10-2026 | next Windows run | Built. Proven in the real app on Linux (real IPC, mouse clicks). Windows API code compiles; NOT RUN on Windows yet. |
-| 2. Fast metadata scan: NTFS MFT reader (needs admin) | Partial | 15-10-2026 | CI run | 3 GB NTFS image, 67,103 entries: 0 differences vs folder walk; 0.11 s vs 2.69 s. Hard cases proven: 221 hard links via $ATTRIBUTE_LIST, DOS names hidden, Hindi/Marathi names, sparse, fragmented. Raw \\.\C: path on Windows: CI pending. |
-| 3. Fallback scan: parallel folder walk (exFAT/FAT32, no admin, network) | Partial | 15-10-2026 | CI run | Proven on Linux. Windows FindFirstFileExW path compiles; CI compare on C:\Program Files pending. |
+| 2. Fast metadata scan: NTFS MFT reader (needs admin) | Done | 15-10-2026 |  | 3 GB NTFS image, 67,103 entries: 0 differences vs folder walk; 0.11 s vs 2.69 s. Hard cases proven: 221 hard links via $ATTRIBUTE_LIST, DOS names hidden, Hindi/Marathi names, sparse, fragmented. REAL WINDOWS (GitHub runner C:, run 2): 1,201,506 files + 208,449 folders, 131 GB, MFT read in 10.3 s. |
+| 3. Fallback scan: parallel folder walk (exFAT/FAT32, no admin, network) | Done | 15-10-2026 |  | REAL WINDOWS: Program Files 304,060 entries, walk 100 s vs MFT 3.8 s (whole volume), 0 differences. System32 23,053 entries: 13 live log files differ (folder listing stale while Windows writes them; MFT is the true value). |
 | 4. Google Drive volume: metadata only, never reads file content | Partial | 15-10-2026 | Ravi's PC | Walk only, no file opened. NOT TESTED against a real Google Drive for Desktop volume. |
 | 5. Per-file metadata: path, name, ext, size, created/modified/accessed, attributes, hard links | Done | 15-10-2026 |  | In Files tab, Excel Files sheets, CSV per drive. |
 | 6. Duplicates: size -> sampled BLAKE3 -> full BLAKE3, disk order on HDD | Done | 15-10-2026 |  | 60,256 files: 257 sets confirmed by full hash. Near-duplicate (same size, same first/last 16 KB) correctly rejected. |
@@ -23,13 +23,14 @@ Mirror of TRACKER.xlsx (same rows). Statuses: Done / Partial / Pending / Can be 
 | 17. Action: Clean junk (to Recycle Bin) + Empty Recycle Bin | Partial | 15-10-2026 | Ravi's PC | Windows-only calls compile; NOT RUN on Windows. |
 | 18. Action: Publish index to Supabase | Partial | 15-10-2026 |  | AUTH REQUIRED: needs URL + service key in Settings and supabase/drive_files.sql run once. Not run. |
 | 19. Google Drive hash match + appProperties avni_moved=1 through Drive API | Pending |  |  | AUTH REQUIRED (Drive API sign-in). |
-| 20. Native app: Tauri 2 + React, tabs, dark/light, tables | Partial | 15-10-2026 | CI run | Proven on Linux build with real engine. Windows exe: CI pending. |
-| 21. Windows build (GitHub Actions, portable exe, no shortcuts) | Pending |  | CI run | Workflow written; first run starts on push. |
-| 22. Real-runtime check on Windows NTFS (CI runner C:) | Pending |  | CI run | MFT vs Windows listing on Program Files + System32, timed Quick scan. |
+| 20. Native app: Tauri 2 + React, tabs, dark/light, tables | Partial | 15-10-2026 | Ravi's PC | Proven on Linux build with real engine (mouse click-through). Windows exe BUILT (15.5 MB); not yet opened on Ravi's PC. |
+| 21. Windows build (GitHub Actions, portable exe, no shortcuts) | Done | 15-10-2026 |  | Run 2 green: artifact AVNI-Drive-Scanner-windows-x64, 15.5 MB, sha256 53BCF921F67C9CB0815DB9103E96356B716B75C169E6FA2A1775AE252E930EE9. All 60 engine tests pass on Windows. |
+| 22. Real-runtime check on Windows NTFS (CI runner C:) | Done | 15-10-2026 |  | Quick scan of C: (1.2M files, 131 GB, SSD): metadata 4.5 s, total 40.5 s, 467 duplicate sets confirmed, 800 copies kept by the tree law. Excel + CSV 1.41M rows in 21.9 s. |
 | 23. Measured on Ravi's own 2 TB HDD | Pending |  | Ravi's PC | NOT MEASURED. |
 | 24. Register in Avni Productivity Pack + Avni Store | Cannot do |  | local session | Not reachable from the cloud session; owed to the next session on the laptop. |
 | 25. Mirror into AEBrain repo | Pending |  | Ravi's OK | This session may push only to sehgalautoriders/avni. Needs Ravi's OK to write into AEBrain. |
 | 26. Desktop subject .md + HANDOFF_TO_CHATGPT_ARCHITECT.md | Partial | 15-10-2026 | local session | HANDOFF.md written in this repo. Desktop not reachable from the cloud. |
 | 27. THE TREE LAW in dedup (port of AvniClean.MayBeRemoved, home rule, HOME CLEARS off) | Done | 15-10-2026 |  | 6 tests replay AvniClean's self-test cases; all pass. |
 | 28. Google Drive account law in Transfer | Done | 15-10-2026 |  | Explicit folder + account required; any other account refused. Which account a DriveFS letter belongs to: CONFIGURED - UNVERIFIED (Ravi confirms in Settings). |
+| 30. Finished files, in-app preview, in-app report/log viewer (Ravi: show everything inside the app) | Partial | 15-10-2026 | today | Engine + commands done and tested (3 tests). Screens in progress. |
 | 29. MOVED ledger (D:\AVNI DATA\_MOVED LEDGER\moved-ledger.csv) | Partial | 15-10-2026 | Ravi's PC | Written when that folder exists. NOT RUN on Ravi's PC. |

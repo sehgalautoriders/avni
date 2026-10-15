@@ -41,9 +41,16 @@ Branch `ccr-2aef8dcd-du1iqm`, repo `sehgalautoriders/avni`, folder `drive-scanne
   On disk, all of them were gone, all 257 keepers were present, and 40 of 40 sampled copies matched their keeper byte for byte.
   That run used my own keeper rule, which has since been deleted. The tree law is now the only keeper rule.
 - **Excel:** 1,000,000 rows in 35.5 s.
+- **Real Windows NTFS** (GitHub Windows runner, C:, CI run 2, 15-10-2026):
+  - Raw MFT read: 1,201,506 files and 208,449 folders, 131 GB, in 10.3 s.
+  - MFT vs Windows' own listing:
+    - Program Files: 304,060 entries, 0 differences. The listing took 100 s; the whole-volume MFT read took 3.8 s.
+    - System32: 23,053 entries, 13 live log files differ. Windows' folder listing is stale for files it is still writing, so the MFT is the true value.
+  - Quick scan of all of C:: metadata 4.5 s, total 40.5 s. Excel + CSV: 1.41M rows in 21.9 s.
+  - All 60 engine tests pass on Windows. The exe builds (15.5 MB).
 - **NOT MEASURED:**
-  - anything on Windows
-  - the 2 TB HDD target
+  - on Ravi's own PC
+  - the 2 TB HDD target (the runner's C: is an SSD)
   - a real Google Drive for Desktop volume
   - Supabase
 
