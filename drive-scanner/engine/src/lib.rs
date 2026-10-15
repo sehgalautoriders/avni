@@ -18,4 +18,5 @@ pub mod settings;
 pub mod supabase;
 pub mod treelaw;
 pub mod util;
+pub mod viewer;
 pub mod walk;

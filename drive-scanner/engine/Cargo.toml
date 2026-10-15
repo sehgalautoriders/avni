@@ -17,6 +17,7 @@ path = "src/bin/avni-scan.rs"
 anyhow = "1.0.104"
 blake3 = "1.8"
 bzip2 = "0.6.1"
+calamine = "0.36.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 crossbeam-channel = "0.5.17"
 csv = "1.4.0"

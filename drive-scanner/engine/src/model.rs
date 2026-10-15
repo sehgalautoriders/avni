@@ -432,3 +432,105 @@ pub struct AppInfo {
     pub gdrive_root: Option<String>,
     pub os: String,
 }
+
+// ---- Finished files, previews and in-app tables (app/src/api.ts mirrors these) ----
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum FinishedResult {
+    Ok,
+    Skipped,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinishedRow {
+    pub id: u32,
+    pub when_ms: i64,
+    pub action: ActionKind,
+    pub result: FinishedResult,
+    pub name: String,
+    pub source: String,
+    pub target: String,
+    pub now_at: String,
+    pub exists: bool,
+    pub kept_at: String,
+    pub bytes: u64,
+    pub message: String,
+    pub log_path: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinishedQuery {
+    pub action: Option<ActionKind>,
+    pub result: Option<FinishedResult>,
+    pub search: Option<String>,
+    pub log_path: Option<String>,
+    pub offset: u32,
+    pub limit: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FinishedPage {
+    pub total: u64,
+    pub bytes: u64,
+    pub rows: Vec<FinishedRow>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewKind {
+    Image,
+    Pdf,
+    Video,
+    Audio,
+    Text,
+    Folder,
+    Table,
+    None,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PreviewEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub modified_ms: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FilePreview {
+    pub path: String,
+    pub name: String,
+    pub kind: PreviewKind,
+    pub exists: bool,
+    pub is_dir: bool,
+    pub size: u64,
+    pub modified_ms: i64,
+    pub text: Option<String>,
+    pub truncated: bool,
+    pub entries: Option<Vec<PreviewEntry>>,
+    pub entries_total: u64,
+    pub note: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TableQuery {
+    pub path: String,
+    pub sheet: Option<String>,
+    pub search: Option<String>,
+    pub offset: u32,
+    pub limit: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TablePage {
+    pub path: String,
+    pub sheets: Vec<String>,
+    pub sheet: Option<String>,
+    pub headers: Vec<String>,
+    pub total: u64,
+    pub rows: Vec<Vec<String>>,
+    pub note: Option<String>,
+}

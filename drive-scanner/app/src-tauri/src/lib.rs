@@ -17,9 +17,24 @@ struct AppState {
     settings: Mutex<Settings>,
     history: Mutex<Vec<ActionResult>>,
     drives: Mutex<Vec<DriveInfo>>,
+    /// Finished files read from the action logs, with the logs' signature they were read at.
+    finished: Mutex<Option<FinishedCache>>,
+    tables: Mutex<avni_scan::viewer::TableCache>,
 }
 
 type Res<T> = Result<T, String>;
+/// (log files signature, every finished row read from them).
+type FinishedCache = (Vec<(String, u64, i64)>, Vec<FinishedRow>);
+
+/// Runs engine work off the window's main thread (Tauri runs plain commands on it, which would freeze the screen).
+async fn blocking<T: Send + 'static>(app: AppHandle, f: impl FnOnce(&AppState) -> Res<T> + Send + 'static) -> Res<T> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let st = app.state::<AppState>();
+        f(&st)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
 
 fn history_path() -> std::path::PathBuf {
     avni_scan::platform::app_dir().join("history.json")
@@ -35,7 +50,11 @@ fn claim(st: &AppState) -> Res<()> {
 }
 
 #[tauri::command]
-fn app_info(st: State<AppState>) -> AppInfo {
+async fn app_info(app: AppHandle) -> Res<AppInfo> {
+    blocking(app, |st| Ok(app_info_now(st))).await
+}
+
+fn app_info_now(st: &AppState) -> AppInfo {
     let settings = st.settings.lock().unwrap().clone();
     let drives = st.drives.lock().unwrap().clone();
     AppInfo {
@@ -51,10 +70,13 @@ fn app_info(st: State<AppState>) -> AppInfo {
 }
 
 #[tauri::command]
-fn list_drives(st: State<AppState>) -> Vec<DriveInfo> {
-    let d = avni_scan::drives::list_drives();
-    *st.drives.lock().unwrap() = d.clone();
-    d
+async fn list_drives(app: AppHandle) -> Res<Vec<DriveInfo>> {
+    blocking(app, |st| {
+        let d = avni_scan::drives::list_drives();
+        *st.drives.lock().unwrap() = d.clone();
+        Ok(d)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -119,24 +141,72 @@ fn scan_status(st: State<AppState>) -> ScanProgress {
 }
 
 #[tauri::command]
-fn get_summary(st: State<AppState>) -> Option<Summary> {
-    st.index.read().unwrap().as_ref().map(|i| i.summary())
+async fn get_summary(app: AppHandle) -> Res<Option<Summary>> {
+    blocking(app, |st| Ok(st.index.read().unwrap().as_ref().map(|i| i.summary()))).await
 }
 
 #[tauri::command]
-fn query_files(st: State<AppState>, q: FileQuery) -> FilePage {
-    match st.index.read().unwrap().as_ref() {
-        Some(i) => i.query(&q),
-        None => FilePage { total: 0, bytes: 0, rows: Vec::new() },
-    }
+async fn query_files(app: AppHandle, q: FileQuery) -> Res<FilePage> {
+    blocking(app, move |st| {
+        Ok(match st.index.read().unwrap().as_ref() {
+            Some(i) => i.query(&q),
+            None => FilePage { total: 0, bytes: 0, rows: Vec::new() },
+        })
+    })
+    .await
 }
 
 #[tauri::command]
-fn query_duplicates(st: State<AppState>, offset: u32, limit: u32, confirmed_only: bool) -> DupPage {
-    match st.index.read().unwrap().as_ref() {
-        Some(i) => i.dup_page(offset, limit.min(500), confirmed_only),
-        None => DupPage { total: 0, groups: Vec::new() },
-    }
+async fn query_duplicates(app: AppHandle, offset: u32, limit: u32, confirmed_only: bool) -> Res<DupPage> {
+    blocking(app, move |st| {
+        Ok(match st.index.read().unwrap().as_ref() {
+            Some(i) => i.dup_page(offset, limit.min(500), confirmed_only),
+            None => DupPage { total: 0, groups: Vec::new() },
+        })
+    })
+    .await
+}
+
+/// Every file the actions finished, where it is now — read from the action logs, newest first.
+#[tauri::command]
+async fn query_finished(app: AppHandle, q: FinishedQuery) -> Res<FinishedPage> {
+    blocking(app, move |st| {
+        let settings = st.settings.lock().unwrap().clone();
+        let logs = avni_scan::settings::reports_dir(&settings).join("logs");
+        let sig = avni_scan::viewer::logs_signature(&logs);
+        let mut cache = st.finished.lock().unwrap();
+        if cache.as_ref().is_none_or(|(s, _)| *s != sig) {
+            *cache = Some((sig, avni_scan::viewer::load_finished(&logs)));
+        }
+        Ok(avni_scan::viewer::finished_page(&cache.as_ref().unwrap().1, &q))
+    })
+    .await
+}
+
+/// A file or folder, ready to show inside the window. Media files are let through the asset protocol one by one.
+#[tauri::command]
+async fn preview_file(app: AppHandle, path: String) -> Res<FilePreview> {
+    let app2 = app.clone();
+    blocking(app, move |st| {
+        let cloud: Vec<String> =
+            st.drives.lock().unwrap().iter().filter(|d| d.role == DriveRole::GoogleDrive).map(|d| d.root.clone()).collect();
+        let p = avni_scan::viewer::preview(&path, &cloud);
+        if matches!(p.kind, PreviewKind::Image | PreviewKind::Pdf | PreviewKind::Video | PreviewKind::Audio) {
+            app2.asset_protocol_scope().allow_file(&path).map_err(|e| e.to_string())?;
+        }
+        Ok(p)
+    })
+    .await
+}
+
+/// A page of a CSV report, an action log or an Excel sheet.
+#[tauri::command]
+async fn read_table(app: AppHandle, q: TableQuery) -> Res<TablePage> {
+    blocking(app, move |st| {
+        let mut cache = st.tables.lock().unwrap();
+        avni_scan::viewer::read_table(&q, &mut cache)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -172,7 +242,11 @@ async fn export_reports(app: AppHandle, include_all_files: bool) -> Res<ReportFi
 }
 
 #[tauri::command]
-fn list_reports(st: State<AppState>) -> Vec<ReportEntry> {
+async fn list_reports(app: AppHandle) -> Res<Vec<ReportEntry>> {
+    blocking(app, |st| Ok(list_reports_now(st))).await
+}
+
+fn list_reports_now(st: &AppState) -> Vec<ReportEntry> {
     let settings = st.settings.lock().unwrap().clone();
     let dir = avni_scan::settings::reports_dir(&settings);
     let mut out = Vec::new();
@@ -210,12 +284,15 @@ fn reveal_path(path: String) -> Res<()> {
 }
 
 #[tauri::command]
-fn preview_action(st: State<AppState>, req: ActionRequest) -> Res<ActionPreview> {
-    let settings = st.settings.lock().unwrap().clone();
-    let drives = st.drives.lock().unwrap().clone();
-    let guard = st.index.read().unwrap();
-    let idx = guard.as_ref().ok_or("No scan yet — scan first.")?;
-    Ok(avni_scan::actions::preview(idx, &settings, &drives, &req))
+async fn preview_action(app: AppHandle, req: ActionRequest) -> Res<ActionPreview> {
+    blocking(app, move |st| {
+        let settings = st.settings.lock().unwrap().clone();
+        let drives = st.drives.lock().unwrap().clone();
+        let guard = st.index.read().unwrap();
+        let idx = guard.as_ref().ok_or("No scan yet — scan first.")?;
+        Ok(avni_scan::actions::preview(idx, &settings, &drives, &req))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -308,6 +385,8 @@ pub fn run() {
         settings: Mutex::new(avni_scan::settings::load()),
         history: Mutex::new(past),
         drives: Mutex::new(avni_scan::drives::list_drives()),
+        finished: Mutex::new(None),
+        tables: Mutex::new(Default::default()),
     };
     tauri::Builder::default()
         .manage(state)
@@ -330,7 +409,10 @@ pub fn run() {
             action_status,
             history,
             get_settings,
-            save_settings
+            save_settings,
+            query_finished,
+            preview_file,
+            read_table
         ])
         .run(tauri::generate_context!())
         .expect("AVNI Drive Scanner failed to start");

@@ -1,7 +1,7 @@
 // The ONE file that talks to the engine. Types mirror engine/src/model.rs 1:1 (snake_case fields, as serde sends them).
 // Outside the Tauri window there is no engine: every call throws EngineMissing and the UI says so. No sample data, ever.
 
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type DriveKind = 'fixed' | 'removable' | 'network' | 'optical' | 'ram' | 'unknown';
@@ -267,6 +267,102 @@ export interface AppInfo {
   os: string;
 }
 
+// ---- Finished files: every file an action finished, read back from the action logs (latest first) ----
+export type FinishedResult = 'ok' | 'skipped' | 'failed';
+
+export interface FinishedRow {
+  /** Position in the current listing (stable until a new action finishes). */
+  id: number;
+  when_ms: number;
+  action: ActionKind;
+  result: FinishedResult;
+  name: string;
+  /** Where the file was. */
+  source: string;
+  /** Where it went, as the log wrote it: a path, "Recycle Bin", "moved to <path>". */
+  target: string;
+  /** The path to show/open now: the new place (Transfer, Extract folder, quarantine) or, for skipped/failed, the
+   *  original. "" when it is in the Recycle Bin. */
+  now_at: string;
+  /** now_at exists right now (checked when this page was read). */
+  exists: boolean;
+  /** Remove duplicates: the identical copy that was kept. "" otherwise. */
+  kept_at: string;
+  bytes: number;
+  message: string;
+  log_path: string;
+}
+
+export interface FinishedQuery {
+  action: ActionKind | null;
+  result: FinishedResult | null;
+  /** Case-insensitive, matched against name, source, target and message. */
+  search: string | null;
+  /** Only the rows of one action run (its log file). */
+  log_path: string | null;
+  offset: number;
+  limit: number;
+}
+
+export interface FinishedPage {
+  total: number;
+  bytes: number;
+  rows: FinishedRow[];
+}
+
+// ---- Preview: any file or folder shown inside the app ----
+/** image/pdf/video/audio: show api.fileUrl(path). text: FilePreview.text. folder: FilePreview.entries.
+ *  table: open with api.readTable (csv, xlsx). none: FilePreview.note says why. */
+export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio' | 'text' | 'folder' | 'table' | 'none';
+
+export interface PreviewEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified_ms: number;
+}
+
+export interface FilePreview {
+  path: string;
+  name: string;
+  kind: PreviewKind;
+  exists: boolean;
+  is_dir: boolean;
+  size: number;
+  modified_ms: number;
+  /** kind text: the first 256 KB as text. */
+  text: string | null;
+  truncated: boolean;
+  /** kind folder: up to 1,000 entries, folders first, then by name. */
+  entries: PreviewEntry[] | null;
+  entries_total: number;
+  /** Why there is no preview (on Google Drive / cloud-only, not there any more, unknown type). */
+  note: string | null;
+}
+
+// ---- Tables inside the app: CSV reports, action logs, Excel sheets ----
+export interface TableQuery {
+  path: string;
+  /** Excel sheet name; null = the first sheet. Ignored for CSV. */
+  sheet: string | null;
+  search: string | null;
+  offset: number;
+  limit: number;
+}
+
+export interface TablePage {
+  path: string;
+  /** Excel: every sheet name. CSV: []. */
+  sheets: string[];
+  sheet: string | null;
+  headers: string[];
+  /** Rows matching the search (all rows when there is none), header row excluded. */
+  total: number;
+  rows: string[][];
+  note: string | null;
+}
+
 export class EngineMissing extends Error {
   constructor() {
     super('Engine not connected — open this screen inside the AVNI Drive Scanner app.');
@@ -320,6 +416,15 @@ export const api = {
   /** supabaseKey: null = keep the stored key, "" = remove it, anything else = store it (encrypted, never shown again). */
   saveSettings: (settings: Settings, supabaseKey: string | null) =>
     call<Settings>('save_settings', { settings, supabaseKey }),
+
+  /** Every file the actions finished, where it is now. */
+  queryFinished: (q: FinishedQuery) => call<FinishedPage>('query_finished', { q }),
+  /** What a file or folder looks like, for showing it inside the app. Never downloads Google Drive files. */
+  previewFile: (path: string) => call<FilePreview>('preview_file', { path }),
+  /** A page of a CSV report, an action log or an Excel sheet. */
+  readTable: (q: TableQuery) => call<TablePage>('read_table', { q }),
+  /** URL the window can load for kind image/pdf/video/audio. Only valid after previewFile(path) said so. */
+  fileUrl: (path: string): string => (inTauri() ? convertFileSrc(path) : ''),
 
   onScanProgress: (cb: (p: ScanProgress) => void) => on<ScanProgress>('scan-progress', cb),
   onScanDone: (cb: (s: Summary | null) => void) => on<Summary | null>('scan-done', cb),

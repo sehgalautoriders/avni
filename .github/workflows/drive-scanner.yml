@@ -5,6 +5,7 @@ name: AVNI Drive Scanner
 
 on:
   push:
+    branches: [main]
     paths: ["drive-scanner/**", ".github/workflows/drive-scanner.yml"]
   pull_request:
     paths: ["drive-scanner/**", ".github/workflows/drive-scanner.yml"]
