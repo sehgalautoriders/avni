@@ -76,7 +76,7 @@ The Architect read PR #1 on GitHub and returned two decisions and five findings.
 | F4 Medium | VM creation changed the host-wide Enhanced Session Mode | `New-Workbench.ps1` measures and reports the setting; changes it only with `-EnableEnhancedSession`. | Done, parse-checked. |
 | F5 Medium | Driver crashed with a TypeError on API errors | Real bug (the word `kind` was passed twice). Fixed. | Done; live API error path still unverified. |
 
-Decisions taken: guest Windows = 90-day Enterprise evaluation ISO. VM disk = E: if healthy and roomy, else D:, never C:, confirmed by preflight numbers first.
+Decisions taken (final 18-10-2026): guest Windows = 90-day Enterprise evaluation ISO. VM disk = chosen only after preflight from measured suitable fixed drives; C: untouched; the SSD reserved for AVNI OS excluded; the 2 TB HDD is the candidate if healthy, roomy and fast enough. Guest-to-LAN block comes BEFORE the first network-connected boot, enforced on the host with Extended Port ACLs (section 8 step 4).
 
 New house rule from the Architect: the Workbench is registered in AVNI Sentinel as **installed but OFF**. It never becomes a permanently running AVNI process. Tracker item 26.
 
@@ -116,7 +116,10 @@ Each demo gets a line in `TRACKER.xlsx` with: measurement method, measured at, s
 |---|---|---|
 | `TRACKER.xlsx` | Item / Status / Time taken / ETA / Notes. One sheet, latest status | n/a |
 | `host/Preflight-Workbench.ps1` | Measures the PC: edition, CPU virtualization, Hyper-V state, RAM, disks, other hypervisors, GPU. Writes JSON + text report. Verdict READY / READY WITH CONDITIONS / NOT READY | PowerShell 7 parse only (Linux) |
-| `host/New-Workbench.ps1` | Creates the VM. Does not start it. Prints the human steps for Windows setup | PowerShell 7 parse only |
+| `host/New-Workbench.ps1` | Creates the VM with the network adapter DISCONNECTED (isolation first). Does not start it. Prints the human steps for Windows setup | PowerShell 7 parse only |
+| `host/Set-WorkbenchNetworkIsolation.ps1` | Hyper-V Extended Port ACLs on the VM adapter: deny RFC1918 and link-local in and out, allow only the host (Default Switch gateway), internet open. Apply / Show / Remove / Connect / Disconnect; Connect refuses without the deny rules | PowerShell 7 parse only |
+| `host/Test-WorkbenchIsolation.ps1` | Proves isolation from inside the guest over PowerShell Direct: LAN targets unreachable, internet reachable, DNS works. Verdict VERIFIED / FAILED / NOT MEASURED | PowerShell 7 parse only |
+| `RESUME-LOCAL-SESSION.md` | Exact resume prompt, order of work and milestone ledger for the local session (Architect decisions 18-10-2026) | n/a |
 | `host/Workbench.ps1` | Operations: Status, Start, Shutdown, Stop, Checkpoint, Checkpoints, Restore, Ip, Connect, Copy | PowerShell 7 parse only |
 | `host/workbench_driver.py` | Claude computer-use loop mapped onto the guest service. Run-folder recording. STOP file. `--dry-run-model` exercises every action without the model | Linux, against the guest service in dry-run |
 | `guest/avni_hands.py` | Guest-resident screen, mouse, keyboard and shell service. Token auth, client allow-list (host + localhost), `/shell` opt-in, PAUSE file, action log, capped screenshot archive | Linux dry-run and 54 unit tests. `SendInput` path unverified |
@@ -124,18 +127,20 @@ Each demo gets a line in `TRACKER.xlsx` with: measurement method, measured at, s
 | `guest/Install-Hands.ps1` | Installs the service inside the guest, firewall rule, logon task, measured health check | PowerShell 7 parse only |
 | `cards/WORKER-CARDS.md` | Bounded cards for senior workers (ChatGPT Pro, Codex, Antigravity). No worker commits | n/a |
 
-## 8. How the first run will go (next local session, Claude runs these, not Ravi)
+## 8. How the first run will go (local session on the PC, Claude runs these, not Ravi)
 
-1. `host/Preflight-Workbench.ps1` on the host. Read the report. Record numbers in the tracker.
-2. Owner decisions: licence path, VHDX drive.
-3. `host/New-Workbench.ps1 -VhdRoot <approved drive>\AVNI-VMs -IsoPath <Windows ISO>` in an elevated PowerShell.
-4. Human at the console: Windows setup inside vmconnect (about 40 minutes). Local account. No Microsoft account.
-5. Inside the guest: `winget install` Chrome, VS Code, Git, Python, PowerShell 7. Then `guest/Install-Hands.ps1` (add `-EnableShell` only if the agent needs a terminal through the service).
-5a. On the host set `AVNI_WORKBENCH_DATA` to a folder on the approved drive so run folders with screenshots stay off C:.
-6. Copy the token file from the guest to the host once (`Workbench.ps1 -Action Copy` goes host to guest; the token comes the other way through a shared clipboard in vmconnect or a one-time read).
-7. `host/Workbench.ps1 -Action Ip`, then `python host/workbench_driver.py --guest <ip> --dry-run-model`. Measured: every action returns ok.
-8. First real task: `--task "Open Notepad, type the date, save to Desktop as test.txt"`. Watch it in vmconnect.
-9. Acceptance demos 1 to 5.
+Order fixed by the Architect on 18-10-2026. Full prompt in `RESUME-LOCAL-SESSION.md`.
+
+1. `host/Preflight-Workbench.ps1`, read-only, plain then elevated. Record the numbers in the tracker. Measure the 2 TB HDD health and speed.
+2. Drive decision from the numbers: not C:, not the SSD reserved for AVNI OS. Set `AVNI_WORKBENCH_DATA` on that drive.
+3. `host/New-Workbench.ps1 -VhdRoot <drive>\AVNI-VMs -IsoPath <evaluation ISO>` elevated. The adapter is created disconnected.
+4. `host/Set-WorkbenchNetworkIsolation.ps1 -Action Apply`, then `-Action Show`, then `-Action Connect`. Before the first connected boot, never after.
+5. Windows setup by hand in vmconnect (local account, offline). Then `Workbench.ps1 -Action Checkpoint -Label "clean install"`.
+6. `host/Test-WorkbenchIsolation.ps1`. Required: ISOLATION VERIFIED. Nothing else proceeds until then.
+7. Inside the guest: `winget install` Chrome, VS Code, Git, Python, PowerShell 7. Then `guest/Install-Hands.ps1` (no `-EnableShell` unless Ravi says so). Copy the token to the host once.
+8. `host/Workbench.ps1 -Action Ip`, then `python host/workbench_driver.py --guest <ip> --dry-run-model` against the real guest. Required: every action ok.
+9. First real task: `--task "Open Notepad, type today's date, save to Desktop as test.txt"`. Watch in vmconnect.
+10. Acceptance demos 1 to 5. Then Sentinel registration as installed-but-OFF, ledger entry, mirror to `D:\AE Brain`.
 
 ## 9. Placement and visibility
 
