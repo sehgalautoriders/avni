@@ -77,6 +77,14 @@ Turn on Enhanced Session Mode on the HOST (Set-VMHost -EnableEnhancedSessionMode
 This is a host-wide Hyper-V setting that affects every VM, so it is off unless you ask.
 Without it the script only reports the current value.
 
+.PARAMETER ConnectNetwork
+Leave the network adapter connected to the virtual switch after creation. By default
+the adapter is created DISCONNECTED (Disconnect-VMNetworkAdapter right after New-VM),
+because the Architect requires network isolation to be applied on the host before the
+first connected boot. The normal order is: create (disconnected), run
+.\Set-WorkbenchNetworkIsolation.ps1 -Action Apply, then -Action Connect, then start the VM.
+Pass -ConnectNetwork only if you accept that isolation has NOT been applied yet.
+
 .EXAMPLE
 .\New-Workbench.ps1 -VhdRoot D:\HyperV -IsoPath D:\ISO\Win11_Enterprise_Eval.iso
 Creates the VM with the ISO attached. Does not start it.
@@ -113,7 +121,9 @@ param(
 
     [switch]$AllowSystemDrive,
 
-    [switch]$EnableEnhancedSession
+    [switch]$EnableEnhancedSession,
+
+    [switch]$ConnectNetwork
 )
 
 Set-StrictMode -Version Latest
@@ -532,6 +542,17 @@ function New-WorkbenchVm {
     }
     if (-not $ok) { Stop-FailedPartway 'Create VM (Generation 2)' }
 
+    # Isolation first: New-VM connected the adapter to the switch; cut it before anything else happens.
+    if (-not $ConnectNetwork) {
+        $ok = Invoke-Step -Title 'Network adapter disconnected (isolation first)' -Command 'Disconnect-VMNetworkAdapter -VMName <name>' -Action {
+            Disconnect-VMNetworkAdapter -VMName $Name
+        }
+        if (-not $ok) { Stop-FailedPartway 'Network adapter disconnected (isolation first)' }
+    }
+    else {
+        Add-Warning 'You passed -ConnectNetwork: the network adapter stays CONNECTED to the switch and isolation has NOT been applied. Do not start the VM until you have run .\Set-WorkbenchNetworkIsolation.ps1 -Action Apply (it refuses while the VM is running and connected).'
+    }
+
     # Safety setting first: the VM must never start by itself when the host boots.
     $ok = Invoke-Step -Title 'Never auto-start; graceful stop on host shutdown' -Command 'Set-VM -AutomaticStartAction Nothing -AutomaticStopAction ShutDown' -Action {
         Set-VM -Name $Name -AutomaticStartAction Nothing -AutomaticStopAction ShutDown
@@ -702,10 +723,12 @@ function Show-ReadBack {
         $text = "{0}, max {1} GB, file on disk now {2} GB" -f $v.VhdType, (Format-GB -Gb ([double]$v.Size / 1GB)), (Format-GB -Gb ([double]$v.FileSize / 1GB))
         New-MeasureResult -Value ([string]$v.VhdType) -Display $text
     }
-    $null = Invoke-Measure -IsReport -What 'Connected switch' -Method 'Get-VMNetworkAdapter (SwitchName)' -Requested $SwitchName -Probe {
+    $null = Invoke-Measure -IsReport -What 'Connected switch' -Method 'Get-VMNetworkAdapter (SwitchName; empty means disconnected)' -Probe {
         $n = @(Get-VMNetworkAdapter -VMName $Name)
         if ($n.Count -eq 0) { throw 'no network adapter' }
-        New-MeasureResult -Value ([string]$n[0].SwitchName) -Display ([string]$n[0].SwitchName)
+        $sw = [string]$n[0].SwitchName
+        if ([string]::IsNullOrEmpty($sw)) { $sw = 'disconnected' }
+        New-MeasureResult -Value $sw -Display $sw
     }
     $null = Invoke-Measure -IsReport -What 'Guest Service Interface enabled' -Method 'Get-VMIntegrationService (Enabled)' -Requested 'True' -Probe {
         $g = Get-GuestServiceInterface -VmName $Name
@@ -735,6 +758,7 @@ function Show-ReadBack {
 # ---------------------------------------------------------------------------
 function Get-NextSteps {
     $steps = New-Object System.Collections.Generic.List[string]
+    $steps.Add('Run .\Set-WorkbenchNetworkIsolation.ps1 -Action Apply then -Action Connect before you start the VM for the first time; Windows setup can run offline, choose "I don''t have internet" / local account.')
     if (-not $script:IsoFull) {
         $steps.Add('No ISO was attached. In Hyper-V Manager right-click the VM, choose Settings. You will see the hardware list.')
         $steps.Add('Click SCSI Controller, click DVD Drive, click Add. Choose Image file, click Browse, pick your Windows ISO, click OK.')
