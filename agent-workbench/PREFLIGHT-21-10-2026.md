@@ -68,3 +68,22 @@ Ravi, 21-10-2026: "There will be no HDD 2 TB, 1 TB SSD is attached" and "All pro
 ## Step F - first run NOT MEASURED, cause found (23:46-23:52)
 
 `Test-WorkbenchIsolation.ps1` from inside the guest: every LAN and internet row failed instantly, DNS failed, verdict NOT MEASURED (positive control failed) and the script correctly refused to run step G. On the host: the 22:36 boot gave the Default Switch a **new gateway 172.26.32.1/20** (the rules were built for 172.17.224.1). The new gateway lies inside the denied 172.16.0.0/12 range, so the guest gets no DHCP lease, no DNS and no NAT. This is the case the cloud session predicted; the cure is `-Action Apply` again for the live gateway, then `ipconfig /renew` in the guest, then the test. The minder now does this at every run, since this PC is powered off every evening.
+
+## Step F - ISOLATION VERIFIED (22-10-2026 00:01)
+
+Heal first (one elevated run, 23:54): `-Action Disconnect` (VM kept running), `-Action Apply` rebuilt the 21 rules for the live gateway 172.26.32.1 (21 old removed, 21 new read back), `-Action Show` inventory MATCHES, `-Action Connect` SwitchName Default Switch, Connected True; then `ipconfig /renew` in the guest: 172.26.35.77/20, gateway and DNS 172.26.32.1, TCP 443 to 1.1.1.1 True.
+
+`Test-WorkbenchIsolation.ps1` over PowerShell Direct, 23:57-00:01, exit 0:
+
+| Group | Target | Check | Measured | Result |
+|---|---|---|---|---|
+| Host ACL | VM adapter | 10 deny rules | all present | PASS |
+| LAN | 10.199.27.85, 192.168.1.10, 192.168.1.254 | TCP 445, TCP 3389 | timed out 21-24 s each | PASS |
+| LAN | same three | ICMP | no reply (weak evidence) | PASS |
+| Internet | 1.1.1.1, 8.8.8.8 | TCP 443 | connected 0-0.1 s | PASS |
+| Internet | www.microsoft.com | DNS A | 23.37.86.48 | PASS |
+| Info | 172.26.32.1 (host) | TCP 445, 3389 | no answer | INFO |
+
+Report: `%LOCALAPPDATA%\Avni\reports\workbench-isolation-test-21-10-2026_2357.json`. Limit stated by the test: "no answer" cannot tell the switch ACL from a target's own firewall; the ACL itself is proven by the read-back.
+
+**Standing rule from this:** the PC is powered off every evening and the Default Switch gateway changes on boot, so before every use run Disconnect, Apply, Connect (the minder does it). A fixed-gateway internal NAT switch would remove the need and is the proper follow-up.
