@@ -25,3 +25,20 @@ Script: `host/Preflight-Workbench.ps1`, Windows PowerShell 5.1. Plain run 17 s, 
 2. **Restart pending** for Hyper-V. Until then `New-Workbench.ps1` cannot run (no Hyper-V module, no vmms).
 
 Nothing was created or allocated on any disk for the VM. The evaluation ISO (decision 1) is fetched to `E:\AVNI-Workbench\iso\` through the internet wall; E: is the detachable overflow drive and the ISO can be re-downloaded.
+
+## Step B - drive decision and measurement (21-10-2026 18:2x)
+
+Ravi, 21-10-2026: "There will be no HDD 2 TB, 1 TB SSD is attached" and "All programs stay on C only. Files from top priority to 1 which the program needs immediately stay on C. Others move to E."
+
+- **Programs on C:** the host scripts, the guest hands service, the host driver and the run folders (`AVNI_WORKBENCH_DATA` = `%LOCALAPPDATA%\Avni\workbench\runs`, set as a User variable).
+- **VM data on E:** `E:\AVNI-Workbench\AVNI-VMs\` for the VHDX and checkpoints, `E:\AVNI-Workbench\iso\` for the evaluation ISO. E: is the detachable overflow drive; the Workbench is OFF by default and can be rebuilt from the ISO. C: has 58 GB free, below the 100 GB floor, so it cannot hold a VHDX.
+
+| E: measurement | Value | Method |
+|---|---|---|
+| Disk | SanDisk Extreme 55DD, SSD, USB, 931.5 GB, 839 GB free | Get-PhysicalDisk, Get-Volume |
+| Health | HealthStatus Healthy, OperationalStatus OK (reliability counters not exposed over USB) | Get-PhysicalDisk |
+| 1 GB write, WriteThrough | 68.5 s = 15 MB/s | FileStream, 16 x 64 MB, Flush(true) |
+| 1 GB write, buffered + final flush | 34.3 s = 30 MB/s | FileStream, 16 x 64 MB, Flush(true) |
+| 1 GB read | 0.6 s - served from the cache, not a disk number | FileStream |
+
+30 MB/s is USB-2 class for a drive that does hundreds of MB/s on USB 3. The USB link is being checked; the VM works at this speed, Windows setup is just slower.

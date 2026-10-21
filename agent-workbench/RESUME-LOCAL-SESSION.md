@@ -14,6 +14,7 @@ Continue AVNI Agent Workbench 01 from GitHub sehgalautoriders/avni PR #1 (branch
 Decisions already taken, do not ask again:
 1. Guest Windows = official 90-day Windows 11 Enterprise evaluation ISO (Microsoft Evaluation Center).
 2. VM disk = chosen only after preflight, from measured suitable fixed drives. C: untouched. The SSD reserved for AVNI OS is excluded. The 2 TB HDD is the candidate if healthy, roomy and fast enough (measure it).
+   RAVI 21-10-2026 (overrides the HDD part): "There will be no HDD 2 TB, 1 TB SSD is attached." and "All programs stay on C only. Files from top priority to 1 which the program needs immediately stay on C. Others move to E." -> VM data (VHDX, checkpoints, ISO) on E:\AVNI-Workbench\; programs and run folders on C:. Measured E: 21-10: Healthy, 839 GB free, 1 GB write 30 MB/s buffered / 15 MB/s write-through.
 3. Guest-to-LAN block BEFORE the first network-connected guest boot. The VM is prepared offline. Only host-to-guest control (TCP 7001) and public internet are allowed.
 4. One workbench, one agent. No clones.
 5. Register in AVNI Sentinel as installed but OFF. Never a permanently running process.
