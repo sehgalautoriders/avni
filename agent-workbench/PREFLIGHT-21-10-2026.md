@@ -42,3 +42,17 @@ Ravi, 21-10-2026: "There will be no HDD 2 TB, 1 TB SSD is attached" and "All pro
 | 1 GB read | 0.6 s - served from the cache, not a disk number | FileStream |
 
 30 MB/s is USB-2 class for a drive that does hundreds of MB/s on USB 3. The USB link is being checked; the VM works at this speed, Windows setup is just slower.
+
+## Steps C and D - VM created, isolation applied, adapter connected (21-10-2026 18:46-18:59)
+
+- **Restart at 18:36** (Ravi) completed the Hyper-V install: vmms and vmcompute running, Hyper-V module present.
+- **Step C, 18:46, elevated:** `New-Workbench.ps1 -VhdRoot E:\AVNI-Workbench\AVNI-VMs -MemoryStartupGB 6 -MemoryMaxGB 8 -ProcessorCount 4`. Read back by the script: Gen 2, dynamic VHDX 200 GB, dynamic memory 6/2/8 GB, 4 vCPU, Secure Boot (MicrosoftWindows), vTPM, Guest Service Interface on, adapter **disconnected**, no automatic start, State Off. No ISO attached yet.
+- **Step D, first run 18:49:** Apply wrote 21 rules and read them back; **Connect FAILED** with Hyper-V error 0x800700B7 ("Cannot create a file when that file already exists") while binding the adapter to the Default Switch.
+- **Cause, measured 18:5x (elevated test):** with the adapter on a live switch port, a second Extended ACL rule with the same Direction and Weight is rejected with exactly that error; a rule with a different weight is accepted; IPv6 rules are accepted. The plan had five Outbound and five Inbound deny rules at weight 50.
+- **Fix:** `Set-WorkbenchNetworkIsolation.ps1` 1.1.0 gives every rule its own weight (Outbound deny 50-56, Inbound deny 40-46, host addresses 60 and up, ExtraAllow 80 and up, gateway 90/98/99/100, Inbound hands 101) and refuses a plan that has a duplicate Direction+Weight before touching the switch.
+- **Step D, run 2, 18:58:** Apply 21 rules, read back 21; Show: inventory MATCHES the adapter, baseline deny rules all present; **Connect: SwitchName = Default Switch, Connected = True**, VM still Off.
+- Behaviour proof (LAN unreachable, internet reachable, DNS works) is step F and needs the guest running.
+
+## Step E prepared - unattended Windows setup
+
+`autounattend.xml` (UEFI partitions, image index 1, local account, OOBE and online-account screens hidden, India Standard Time, auto-logon) built into `E:\AVNI-Workbench\iso\autounattend.iso` with Windows' own IMAPI2 (no ADK needed). The guest account record lives only on the PC. Setup therefore needs nobody clicking inside vmconnect, which also keeps Ravi's keyboard his own.

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
 Applies, shows, removes and connects the host-enforced network isolation of the AVNI Agent Workbench VM (Hyper-V Extended Port ACLs).
@@ -39,18 +39,20 @@ Rules created by Apply (Direction, Action, Weight, remote):
                       RDP 3389, dev servers, databases) stay unreachable from the guest. NAT
                       traffic to the internet carries the public destination address, so it
                       needs no gateway rule.
-  Inbound  Allow 100  gateway /32, TCP, local port 7001, stateful (the hands service)
+  Inbound  Allow 101  gateway /32, TCP, local port 7001, stateful (the hands service)
   Inbound  Allow  90  gateway /32, any protocol. Integration services (heartbeat,
                       Copy-VMFile) do NOT use the network, so this is a convenience for the
                       host only, not something the integration services need.
-  Outbound Deny   60  each of the host's own LAN IPv4 /32 addresses (belt and braces), each
-                      host LAN subnet not already covered by the ranges below, each -ExtraDeny
-  Outbound Allow  70  each -ExtraAllow, stateful
-  Outbound Deny   50  10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10
-  Inbound  Deny   50  the same five ranges (nothing on the LAN or other VMs can reach the guest;
-                      the weight 100/90 gateway allows win over this)
-  Both ways Deny  50  fc00::/7 and fe80::/10 (IPv6 ULA and link-local cannot bypass the IPv4
-                      rules; global IPv6 is left untouched)
+  Outbound Deny   60, 61, ...  each of the host's own LAN IPv4 /32 addresses (belt and braces),
+                      each host LAN subnet not already covered by the ranges below, each -ExtraDeny
+  Outbound Allow  80, 81, ...  each -ExtraAllow, stateful
+  Outbound Deny   50..54  10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10
+  Inbound  Deny   40..44  the same five ranges (nothing on the LAN or other VMs can reach the guest;
+                      the weight 101/90 gateway allows win over this)
+  Outbound Deny   55, 56 / Inbound Deny 45, 46  fc00::/7 and fe80::/10 (IPv6 ULA and link-local
+                      cannot bypass the IPv4 rules; global IPv6 is left untouched)
+  Every rule has its own weight: Hyper-V rejects two rules with the same Direction and Weight on a
+  live switch port (0x800700B7, measured 21-10-2026), which is what broke the first Connect.
 There is NO catch-all rule: everything not matched, that is the public internet, stays
 allowed. That is the intended "approved internet access".
 
@@ -122,7 +124,7 @@ $ErrorActionPreference = 'Stop'
 # Script-wide state and constants
 # ---------------------------------------------------------------------------
 $script:ToolName      = 'Set-WorkbenchNetworkIsolation'
-$script:ToolVersion   = '1.0.0'
+$script:ToolVersion   = '1.1.0'
 $script:Culture       = [System.Globalization.CultureInfo]::InvariantCulture
 $script:Started       = Get-Date
 $script:ExitCode      = 0
@@ -138,11 +140,16 @@ $script:GatewayAlias  = 'vEthernet (Default Switch)'
 $script:HandsPort     = 7001
 $script:PrivateV4     = @('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '100.64.0.0/10')
 $script:PrivateV6     = @('fc00::/7', 'fe80::/10')
-$script:DenyWeight    = 50
-$script:HostDenyWeight = 60
-$script:ExtraAllowWeight = 70
+# Hyper-V rejects a second Extended ACL rule with the same Direction and Weight once the adapter sits on a
+# live switch port (measured 21-10-2026 on the PC: "Cannot create a file when that file already exists",
+# 0x800700B7; the same rules were accepted while the adapter was disconnected and then broke Connect).
+# So every rule gets its own weight. Higher wins; the bands keep the intended order.
+$script:DenyOutWeight = 50       # 50, 51, ... one per private range, Outbound
+$script:DenyInWeight  = 40       # 40, 41, ... one per private range, Inbound
+$script:HostDenyWeight = 60      # 60, 61, ... host addresses, host subnets, -ExtraDeny (Outbound)
+$script:ExtraAllowWeight = 80    # 80, 81, ... -ExtraAllow (Outbound)
 $script:GwAnyInWeight = 90
-$script:GwWeight      = 100
+$script:GwWeight      = 100      # Outbound 100/99/98 for DNS and hands replies; Inbound 101 for the hands service
 
 # ---------------------------------------------------------------------------
 # Helpers (house style, same as Workbench.ps1)
@@ -567,11 +574,11 @@ function Write-Inventory {
 function Get-BaselineDenyKeys {
     # The deny rules whose presence Connect insists on.
     $keys = New-Object System.Collections.Generic.List[string]
-    foreach ($r in $script:PrivateV4) {
-        foreach ($d in @('Outbound', 'Inbound')) { $keys.Add((Get-RuleKey -Direction $d -RuleAction 'Deny' -Weight $script:DenyWeight -Remote $r)) }
-    }
-    foreach ($r in $script:PrivateV6) {
-        foreach ($d in @('Outbound', 'Inbound')) { $keys.Add((Get-RuleKey -Direction $d -RuleAction 'Deny' -Weight $script:DenyWeight -Remote $r)) }
+    $i = 0
+    foreach ($r in @($script:PrivateV4 + $script:PrivateV6)) {
+        $keys.Add((Get-RuleKey -Direction 'Outbound' -RuleAction 'Deny' -Weight ($script:DenyOutWeight + $i) -Remote $r))
+        $keys.Add((Get-RuleKey -Direction 'Inbound' -RuleAction 'Deny' -Weight ($script:DenyInWeight + $i) -Remote $r))
+        $i++
     }
     return $keys.ToArray()
 }
@@ -615,36 +622,44 @@ function Get-PlannedRules {
     & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Allow' -Weight $script:GwWeight -Remote $gw -Protocol 'UDP' -RemotePort '53' -Stateful $true -Purpose 'DNS to the Default Switch gateway (UDP 53)')
     & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Allow' -Weight ($script:GwWeight - 1) -Remote $gw -Protocol 'TCP' -RemotePort '53' -Stateful $true -Purpose 'DNS to the Default Switch gateway (TCP 53)')
     & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Allow' -Weight ($script:GwWeight - 2) -Remote $gw -Protocol 'TCP' -LocalPort ([string]$script:HandsPort) -Purpose 'replies of the hands service to the host (guest local port 7001), works even if stateful is not honoured')
-    & $add (New-RuleSpec -Direction 'Inbound' -RuleAction 'Allow' -Weight $script:GwWeight -Remote $gw -Protocol 'TCP' -LocalPort ([string]$script:HandsPort) -Stateful $true -Purpose 'hands service from the host only')
+    & $add (New-RuleSpec -Direction 'Inbound' -RuleAction 'Allow' -Weight ($script:GwWeight + 1) -Remote $gw -Protocol 'TCP' -LocalPort ([string]$script:HandsPort) -Stateful $true -Purpose 'hands service from the host only')
     & $add (New-RuleSpec -Direction 'Inbound' -RuleAction 'Allow' -Weight $script:GwAnyInWeight -Remote $gw -Purpose 'any protocol from the host gateway (convenience; integration services do not use the network)')
-    foreach ($r in $script:PrivateV4) {
-        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $script:DenyWeight -Remote $r -Purpose 'block private/link-local/CGNAT range')
-        & $add (New-RuleSpec -Direction 'Inbound' -RuleAction 'Deny' -Weight $script:DenyWeight -Remote $r -Purpose 'block private/link-local/CGNAT range')
-    }
-    foreach ($r in $script:PrivateV6) {
-        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $script:DenyWeight -Remote $r -Purpose 'block IPv6 ULA/link-local')
-        & $add (New-RuleSpec -Direction 'Inbound' -RuleAction 'Deny' -Weight $script:DenyWeight -Remote $r -Purpose 'block IPv6 ULA/link-local')
+    # One weight per rule (see the weight constants): the same index for a range in both directions,
+    # in the same order as Get-BaselineDenyKeys.
+    $i = 0
+    foreach ($r in @($script:PrivateV4 + $script:PrivateV6)) {
+        $why = if ($r -like '*:*') { 'block IPv6 ULA/link-local' } else { 'block private/link-local/CGNAT range' }
+        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight ($script:DenyOutWeight + $i) -Remote $r -Purpose $why)
+        & $add (New-RuleSpec -Direction 'Inbound' -RuleAction 'Deny' -Weight ($script:DenyInWeight + $i) -Remote $r -Purpose $why)
+        $i++
     }
     $privRanges = @($script:PrivateV4 | ForEach-Object { Get-Ipv4Range -Text $_ })
+    $hw = $script:HostDenyWeight
     foreach ($h in @($HostLan)) {
-        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $script:HostDenyWeight -Remote ($h.Ip + '/32') -Purpose 'host own LAN address')
+        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $hw -Remote ($h.Ip + '/32') -Purpose 'host own LAN address'); $hw++
         if ($h.PrefixLength -ge 8 -and $h.PrefixLength -le 30) {
             $net = Get-Ipv4Range -Text ($h.Ip + '/' + $h.PrefixLength)
             $covered = $false
             foreach ($p in $privRanges) { if (Test-RangeContains -Outer $p -Inner $net) { $covered = $true } }
             if (-not $covered) {
-                & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $script:HostDenyWeight -Remote $net.Cidr -Purpose 'host LAN subnet (not covered by the private ranges)')
+                & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $hw -Remote $net.Cidr -Purpose 'host LAN subnet (not covered by the private ranges)'); $hw++
             }
         }
     }
     foreach ($d in @($Deny)) {
         $r = Get-Ipv4Range -Text $d
-        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $script:HostDenyWeight -Remote $r.Cidr -Purpose 'ExtraDeny')
+        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Deny' -Weight $hw -Remote $r.Cidr -Purpose 'ExtraDeny'); $hw++
     }
+    if ($hw -gt $script:ExtraAllowWeight) { throw ('too many host/ExtraDeny rules: weights ' + $script:HostDenyWeight + '..' + ($hw - 1) + ' run into the ExtraAllow band at ' + $script:ExtraAllowWeight) }
+    $aw = $script:ExtraAllowWeight
     foreach ($a in @($Allow)) {
         $r = Get-Ipv4Range -Text $a
-        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Allow' -Weight $script:ExtraAllowWeight -Remote $r.Cidr -Stateful $true -Purpose 'ExtraAllow')
+        & $add (New-RuleSpec -Direction 'Outbound' -RuleAction 'Allow' -Weight $aw -Remote $r.Cidr -Stateful $true -Purpose 'ExtraAllow'); $aw++
     }
+    if ($aw -gt $script:GwAnyInWeight) { throw ('too many ExtraAllow rules: weights run into the gateway band at ' + $script:GwAnyInWeight) }
+    # Hyper-V needs Direction + Weight to be unique on the adapter: prove it here, never on the switch port.
+    $dup = @($plan | Group-Object -Property { $_.Direction + '|' + $_.Weight } | Where-Object { $_.Count -gt 1 })
+    if ($dup.Count -gt 0) { throw ('rule plan has duplicate Direction+Weight: ' + (($dup | ForEach-Object { $_.Name }) -join ', ')) }
     return $plan.ToArray()
 }
 
@@ -769,7 +784,7 @@ function Show-InventoryComparison {
     if (@($Cmp.Foreign).Count -gt 0) {
         Write-Tagged -Tag '[MEASURED]' -Text (@($Cmp.Foreign).Count.ToString() + ' rule(s) on the adapter are NOT in the inventory (not created by this script; never touched by it)') -Color 'Yellow'
     }
-    if (@($Cmp.BaselineMissing).Count -eq 0) { Write-Tagged -Tag '[MEASURED]' -Text 'Baseline deny rules (5 IPv4 ranges + fc00::/7 + fe80::/10, both directions, weight 50): all present' -Color 'Cyan' }
+    if (@($Cmp.BaselineMissing).Count -eq 0) { Write-Tagged -Tag '[MEASURED]' -Text 'Baseline deny rules (5 IPv4 ranges + fc00::/7 + fe80::/10, both directions, one weight each): all present' -Color 'Cyan' }
     else { Write-Tagged -Tag '[MEASURED]' -Text ('Baseline deny rules: ' + @($Cmp.BaselineMissing).Count + ' MISSING') -Color 'Red' }
 }
 
