@@ -56,3 +56,15 @@ Ravi, 21-10-2026: "There will be no HDD 2 TB, 1 TB SSD is attached" and "All pro
 ## Step E prepared - unattended Windows setup
 
 `autounattend.xml` (UEFI partitions, image index 1, local account, OOBE and online-account screens hidden, India Standard Time, auto-logon) built into `E:\AVNI-Workbench\iso\autounattend.iso` with Windows' own IMAPI2 (no ADK needed). The guest account record lives only on the PC. Setup therefore needs nobody clicking inside vmconnect, which also keeps Ravi's keyboard his own.
+
+## Step E - Windows installed unattended (21-10-2026 20:16-23:43)
+
+- ISO complete 20:11 (8,225,329,152 bytes; mounted, `sources\install.wim` and `setup.exe` present). A first copy written by two download processes at once was found corrupt and removed; the clean copy was downloaded again from zero by one process.
+- 20:12 both ISOs attached as DVD drives, Windows ISO first in the boot order; 20:16 `Start-VM`; Enter sent through WMI `Msvm_Keyboard.TypeKey` for the "Press any key" prompt (33 accepted). Nobody clicked in vmconnect.
+- The host's power-off/boot at 22:36 switched the VM Off mid-way (Hyper-V keeps no state on a power-off). A minder restarted it 23:32; "Just a moment" (first run) until 23:42, then PowerShell Direct answered: `AVNI-WB01\agent`, OOBEInProgress 0, explorer running. VHDX 16.6 GB.
+- 23:43:56 checkpoint `21-10-2026 2342 clean install` created and read back (`Workbench.ps1 -Action Checkpoint`).
+- Guest screen thumbnails without vmconnect: WMI `GetVirtualSystemThumbnailImage` (RGB565 640x360) saved under `%LOCALAPPDATA%\Avni\workbench\runs\`.
+
+## Step F - first run NOT MEASURED, cause found (23:46-23:52)
+
+`Test-WorkbenchIsolation.ps1` from inside the guest: every LAN and internet row failed instantly, DNS failed, verdict NOT MEASURED (positive control failed) and the script correctly refused to run step G. On the host: the 22:36 boot gave the Default Switch a **new gateway 172.26.32.1/20** (the rules were built for 172.17.224.1). The new gateway lies inside the denied 172.16.0.0/12 range, so the guest gets no DHCP lease, no DNS and no NAT. This is the case the cloud session predicted; the cure is `-Action Apply` again for the live gateway, then `ipconfig /renew` in the guest, then the test. The minder now does this at every run, since this PC is powered off every evening.
